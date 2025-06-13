@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
 import { 
   Home, 
   Users, 
@@ -14,23 +14,42 @@ import {
   Search,
   User
 } from 'lucide-react';
+import Dashboard from './Dashboard';
+import EmployeeInfo from './admin/info/EmployeeInfo';
+import Test1 from './Test1';
+import Test2 from './Test2';
+import BuildingInfo from './admin/info/BuildingInfo';
+import ProductInfo from './admin/info/ProductInfo'; 
+import TruckInfo from './admin/info/TruckInfo';
+import TruckZoneInfo from './admin/info/TruckZoneInfo';
 
-const Layout = ({ children }) => {
+const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Navigation structure with routes
   const navigationData = {
     dashboard: {
       title: 'Dashboard',
       icon: Home,
       route: '/dashboard',
       topNavItems: [
-        { id: 'overview', label: 'Overview', active: true },
-        { id: 'analytics', label: 'Analytics' },
-        { id: 'reports', label: 'Reports' }
+        { id: 'overview', label: 'Overview', path: 'overview', component: Dashboard },
+        { id: 'analytics', label: 'Analytics', path: 'analytics', component: Test2 },
+        { id: 'reports', label: 'Reports', path: 'reports', component: Test1 }
+      ]
+    },
+    products: {
+      title: 'Information',
+      icon: ShoppingCart,
+      route: '/info',
+      topNavItems: [
+        { id: 'employee', label: 'Employee', path: 'employee', component: EmployeeInfo },
+        { id: 'building', label: 'Building', path: 'building', component: BuildingInfo },
+        { id: 'product', label: 'Product', path: 'product', component: ProductInfo },
+        { id: 'truck', label: 'Truck', path: 'truck', component: TruckInfo },
+        { id: 'truckzone', label: 'TruckZone', path: 'truckzone', component: TruckZoneInfo },
       ]
     },
     users: {
@@ -38,32 +57,10 @@ const Layout = ({ children }) => {
       icon: Users,
       route: '/users',
       topNavItems: [
-        { id: 'all-users', label: 'All Users', active: true },
-        { id: 'active-users', label: 'Active Users' },
-        { id: 'user-roles', label: 'User Roles' },
-        { id: 'permissions', label: 'Permissions' }
-      ]
-    },
-    products: {
-      title: 'Products',
-      icon: ShoppingCart,
-      route: '/products',
-      topNavItems: [
-        { id: 'inventory', label: 'Inventory', active: true },
-        { id: 'categories', label: 'Categories' },
-        { id: 'pricing', label: 'Pricing' },
-        { id: 'suppliers', label: 'Suppliers' }
-      ]
-    },
-    analytics: {
-      title: 'Analytics',
-      icon: BarChart3,
-      route: '/analytics',
-      topNavItems: [
-        { id: 'performance', label: 'Performance', active: true },
-        { id: 'traffic', label: 'Traffic' },
-        { id: 'conversions', label: 'Conversions' },
-        { id: 'revenue', label: 'Revenue' }
+        { id: 'all-users', label: 'All Users', path: 'all-users' },
+        { id: 'active-users', label: 'Active Users', path: 'active-users' },
+        { id: 'user-roles', label: 'User Roles', path: 'user-roles' },
+        { id: 'permissions', label: 'Permissions', path: 'permissions' }
       ]
     },
     documents: {
@@ -71,10 +68,10 @@ const Layout = ({ children }) => {
       icon: FileText,
       route: '/documents',
       topNavItems: [
-        { id: 'all-docs', label: 'All Documents', active: true },
-        { id: 'templates', label: 'Templates' },
-        { id: 'shared', label: 'Shared' },
-        { id: 'archive', label: 'Archive' }
+        { id: 'all-docs', label: 'All Documents', path: 'all-docs' },
+        { id: 'templates', label: 'Templates', path: 'templates' },
+        { id: 'shared', label: 'Shared', path: 'shared' },
+        { id: 'archive', label: 'Archive', path: 'archive' }
       ]
     },
     settings: {
@@ -82,10 +79,19 @@ const Layout = ({ children }) => {
       icon: Settings,
       route: '/settings',
       topNavItems: [
-        { id: 'general', label: 'General', active: true },
-        { id: 'security', label: 'Security' },
-        { id: 'notifications', label: 'Notifications' },
-        { id: 'integrations', label: 'Integrations' }
+        { id: 'general', label: 'General', path: 'general' },
+        { id: 'security', label: 'Security', path: 'security' },
+        { id: 'notifications', label: 'Notifications', path: 'notifications' },
+        { id: 'integrations', label: 'Integrations', path: 'integrations' }
+      ]
+    },
+    testing: {
+      title: 'Testing',
+      icon: BarChart3,
+      route: '/testing',
+      topNavItems: [
+        { id: 'test1', label: 'Test 1', path: 'test1', component: Test1 },
+        { id: 'test2', label: 'Test 2', path: 'test2', component: Test2 }
       ]
     }
   };
@@ -98,7 +104,6 @@ const Layout = ({ children }) => {
     if (section.route) {
       navigate(section.route);
     }
-    // Set the first item as active when switching sections
     const firstItem = section.topNavItems[0];
     setTopNavActive(firstItem.id);
   };
@@ -109,14 +114,13 @@ const Layout = ({ children }) => {
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <div className={`${isSidebarOpen ? 'w-64' : 'w-16'} bg-white shadow-lg transition-all duration-300 ease-in-out border-r border-gray-200`}>
-        {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           {isSidebarOpen && (
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">P</span>
+                <span className="text-white font-bold text-sm">T</span>
               </div>
-              <span className="text-xl font-bold text-gray-800">Project</span>
+              <span className="text-xl font-bold text-gray-800">TBMDelivery</span>
             </div>
           )}
           <button
@@ -132,7 +136,6 @@ const Layout = ({ children }) => {
           {Object.entries(navigationData).map(([key, item]) => {
             const IconComponent = item.icon;
             const isActive = activeSection === key;
-            
             return (
               <button
                 key={key}
@@ -168,30 +171,13 @@ const Layout = ({ children }) => {
       <div className="flex-1 flex flex-col">
         {/* Top Navigation */}
         <div className="bg-white shadow-sm border-b border-gray-200">
-          {/* Top Bar with Search and User Actions */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h1 className="text-xl font-bold text-gray-800">{currentSection.title}</h1>
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-800">{currentSection.title}</h1>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              {/* Notifications */}
               <button className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                 <Bell size={20} />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
               </button>
-              
-              {/* User Profile */}
               <button className="flex items-center space-x-2 p-2 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                 <User size={20} />
                 <span className="hidden md:block font-medium">John Doe</span>
@@ -199,14 +185,17 @@ const Layout = ({ children }) => {
             </div>
           </div>
 
-          {/* Dynamic Sub Navigation */}
-          <div className="px-6 py-3">
+          {/* Top Navigation Buttons */}
+          <div className="px-4 py-1 ">
             <nav className="flex space-x-1">
               {currentSection.topNavItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setTopNavActive(item.id)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  onClick={() => {
+                    setTopNavActive(item.id);
+                    navigate(`${currentSection.route}/${item.path}`);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-small transition-all duration-200 ${
                     topNavActive === item.id
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
@@ -219,29 +208,25 @@ const Layout = ({ children }) => {
           </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 p-6 bg-gray-50">
-          {children || (
-            <div className="bg-white rounded-lg shadow-sm p-6 h-full">
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">
-                  {React.createElement(currentSection.icon, { 
-                    size: 64, 
-                    className: "mx-auto text-blue-600" 
-                  })}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                  {currentSection.title}
-                </h2>
-                <p className="text-gray-600 mb-4">
-                  Currently viewing: {currentSection.topNavItems.find(item => item.id === topNavActive)?.label}
-                </p>
-                <div className="text-sm text-gray-500">
-                  Your content for this section would go here
-                </div>
-              </div>
-            </div>
-          )}
+        {/* Rendered Page */}
+        <div className="flex-1 p-2 bg-gray-50">
+          <Routes>
+            {Object.entries(navigationData).flatMap(([sectionKey, section]) =>
+              section.topNavItems.map((item) =>
+                item.component ? (
+                  <Route
+                    key={`${section.route}/${item.path}`}
+                    path={`${section.route}/${item.path}`}
+                    element={<item.component />}
+                  />
+                ) : null
+              )
+            )}
+            {/* Default fallback route */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/info" element={<EmployeeInfo />} />
+          </Routes>
         </div>
       </div>
     </div>
