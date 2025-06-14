@@ -1,5 +1,5 @@
 import { db } from "../firebase";
-import { collection, getDocs, doc, updateDoc, deleteDoc, setDoc, addDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, deleteDoc, setDoc, addDoc, query, where } from "firebase/firestore";
 
 // -------- Employee --------
 export async function getAllEmployees() {
@@ -25,7 +25,6 @@ async function getNextEmployeeID() {
   return `EMP_${nextNum.toString().padStart(5, "0")}`;
 }
 
-// Add new employee: document ID == EmployeeID
 export async function addEmployee(data) {
   const EmployeeID = await getNextEmployeeID();
   const newData = { ...data, EmployeeID };
@@ -34,13 +33,11 @@ export async function addEmployee(data) {
   return { id: EmployeeID, ...newData };
 }
 
-// Update employee (id, data)
 export async function updateEmployee(id, data) {
   const docRef = doc(db, "Employee", id);
   await updateDoc(docRef, data);
 }
 
-// Delete employee (id)
 export async function deleteEmployee(id) {
   await deleteDoc(doc(db, "Employee", id));
 }
@@ -242,3 +239,111 @@ export async function deleteProduct(id) {
   await deleteDoc(docRef);
 }
 
+// -------- Teams --------
+
+export async function getAllTeams() {
+  // Fetch all documents from Teams collection
+  const querySnapshot = await getDocs(collection(db, "Team"));
+  return querySnapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+export async function getNextTeamID() {
+  const querySnapshot = await getDocs(collection(db, "Team"));
+  let maxNumber = 0;
+  querySnapshot.forEach(docSnap => {
+    const tid = docSnap.data().TeamID;
+    if (tid && /^TEM_\d{5}$/.test(tid)) {
+      const num = parseInt(tid.substring(4), 10);
+      if (num > maxNumber) maxNumber = num;
+    }
+  });
+  const nextNum = maxNumber + 1;
+  return `TEM_${nextNum.toString().padStart(5, "0")}`;
+}
+
+// Add new team: document ID == TeamID
+export async function addTeam(data) {
+  const TeamID = await getNextTeamID();
+  const newData = { ...data, TeamID };
+  const docRef = doc(db, "Team", TeamID); // set doc ID!
+  await setDoc(docRef, newData);
+  return { id: TeamID, ...newData };
+}
+
+// Update team (id, data)
+export async function updateTeam(id, data) {
+  const docRef = doc(db, "Team", id);
+  await updateDoc(docRef, data);
+}
+
+// Delete team (id)
+export async function deleteTeam(id) {
+  await deleteDoc(doc(db, "Team", id));
+}
+
+// -------- EmployeeTeamAssignment --------
+
+export async function getAllEmployeeTeamAssignments() {
+  // Fetch all documents from EmployeeTeamAssignment collection
+  const querySnapshot = await getDocs(collection(db, "EmployeeTeamAssignment"));
+  return querySnapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}
+
+export async function addEmployeeTeamAssignment(data) {
+  const docRef = await addDoc(collection(db, "EmployeeTeamAssignment"), data);
+  return { id: docRef.id, ...data };
+}
+
+export async function updateEmployeeTeamAssignment(employeeId, data) {
+  console.log("Updating EmployeeTeamAssignment for employeeId:", employeeId, "with data:", data);
+  const assignmentRef = collection(db, "EmployeeTeamAssignment");
+  const q = query(assignmentRef, where("EmployeeID", "==", employeeId));
+  const querySnapshot = await getDocs(q);
+
+  if (!data.TeamID) throw new Error("No TeamID provided");
+
+  if (!querySnapshot.empty) {
+    // Update the first matching assignment
+    const docRef = querySnapshot.docs[0].ref;
+    await updateDoc(docRef, data);
+  }
+
+}
+
+export async function deleteEmployeeTeamAssignment(id) {
+  const docRef = doc(db, "EmployeeTeamAssignment", id);
+  await deleteDoc(docRef);
+}
+
+export async function assignOrUpdateEmployeeTeam(employeeId, teamId) {
+  const assignmentsRef = collection(db, "EmployeeTeamAssignment");
+  const q = query(assignmentsRef, where("EmployeeID", "==", employeeId));
+  const querySnapshot = await getDocs(q);
+
+  if (!querySnapshot.empty) {
+    const docRef = doc(db, "EmployeeTeamAssignment", querySnapshot.docs[0].id);
+    await updateDoc(docRef, { TeamID: teamId });
+    return { id: querySnapshot.docs[0].id, EmployeeID: employeeId, TeamID: teamId };
+  } else {
+    const newData = { EmployeeID: employeeId, TeamID: teamId };
+    const docRef = await addDoc(assignmentsRef, newData);
+    return { id: docRef.id, ...newData };
+  }
+}
+
+// -------- Report --------
+
+export async function getAllReports() {
+  // Fetch all documents from Teams collection
+  const querySnapshot = await getDocs(collection(db, "Report"));
+  return querySnapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+}

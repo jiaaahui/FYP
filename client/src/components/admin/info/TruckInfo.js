@@ -83,7 +83,7 @@ export default function TruckInfo() {
     }
 
     function handleModalChange(e) {
-        const { name, value, type } = e.target;
+        const { name, value } = e.target;
         let val = value;
         if (["Tone", "LengthCM", "WidthCM", "HeightCM"].includes(name)) {
             val = value === "" ? "" : Number(value);
@@ -137,7 +137,7 @@ export default function TruckInfo() {
                     name="Tone"
                     value={val === "" ? "" : String(val)}
                     onChange={onChange}
-                    className="border p-2 rounded w-full text-sm"
+                    className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                 >
                     <option value="">Select tonnage</option>
@@ -151,7 +151,7 @@ export default function TruckInfo() {
                 name={k}
                 value={val ?? ""}
                 onChange={onChange}
-                className="border p-2 rounded w-full text-sm"
+                className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 type={["LengthCM", "WidthCM", "HeightCM"].includes(k) ? "number" : "text"}
                 required={isEdit}
             />
@@ -162,54 +162,77 @@ export default function TruckInfo() {
     }
 
     return (
-        <div className="bg-white p-3 rounded shadow">
-            <div className="flex justify-end mb-4">
-                <button onClick={openAddModal} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-xs">+ Add Truck</button>
+        <div className="bg-white p-6 rounded-lg shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">Truck Management</h2>
+                <button
+                    onClick={openAddModal}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
+                >
+                    + Add Truck
+                </button>
             </div>
-            {successMsg && <div className="mb-4 text-green-600 text-xs">{successMsg}</div>}
-            {error && <div className="mb-4 text-red-600 text-xs">{error}</div>}
+            {successMsg && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">{successMsg}</div>}
+            {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
             <div className="overflow-x-auto">
-                <table className="min-w-full border border-gray-200 rounded bg-white">
-                    <thead className="bg-gray-100">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
                         <tr>
-                            <th className="p-2 border text-xs">#</th>
-                            {TABLE_KEYS.map(k => <th key={k} className="p-2 border text-xs">{FIELD_LABELS[k] || k}</th>)}
-                            <th className="p-2 border text-xs">Actions</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                            {TABLE_KEYS.map(k => (
+                                <th key={k} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    {FIELD_LABELS[k] || k}
+                                </th>
+                            ))}
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="bg-white divide-y divide-gray-200">
                         {loading ? (
-                            <tr><td colSpan={TABLE_KEYS.length + 2} className="text-center p-6 text-xs">Loading...</td></tr>
+                            <tr>
+                                <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8">
+                                    <div className="flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                        <span className="ml-2 text-gray-500">Loading trucks...</span>
+                                    </div>
+                                </td>
+                            </tr>
                         ) : trucks.length === 0 ? (
-                            <tr><td colSpan={TABLE_KEYS.length + 2} className="text-center py-6 text-xs">No trucks found.</td></tr>
+                            <tr>
+                                <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8 text-gray-500">
+                                    No trucks found.
+                                </td>
+                            </tr>
                         ) : (
                             trucks.map((item, idx) => (
-                                <tr key={item.TruckID || item.truck_id || item.id}>
-                                    <td className="p-2 border text-center font-mono text-xs">{idx + 1}</td>
+                                <tr key={item.TruckID || item.truck_id || item.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{idx + 1}</td>
                                     {TABLE_KEYS.map(k => (
-                                        <td className="p-2 border text-xs" key={k}>
+                                        <td className="px-4 py-3 text-sm text-gray-900" key={k}>
                                             {renderTableCell(k, item[k], item)}
                                         </td>
                                     ))}
-                                    <td className="p-2 border text-xs">
+                                    <td className="px-4 py-3 text-sm">
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => openEditModal(idx)}
-                                                className="px-2 py-1 rounded hover:bg-blue-100 text-blue-600 text-lg"
-                                                title="Edit"
+                                                className="px-3 py-1 rounded-md text-blue-600 hover:bg-blue-50 transition-colors duration-200"
+                                                title="Edit Truck"
                                                 disabled={saving}
-                                                aria-label="Edit"
                                             >
-                                                ✏️
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(item.TruckID || item.truck_id || item.id)}
-                                                className="px-2 py-1 rounded hover:bg-red-100 text-red-600 text-lg"
-                                                title="Delete"
+                                                className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
+                                                title="Delete Truck"
                                                 disabled={saving}
-                                                aria-label="Delete"
                                             >
-                                                🗑️
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
                                             </button>
                                         </div>
                                     </td>
@@ -235,17 +258,17 @@ export default function TruckInfo() {
                     <div className="flex gap-3 pt-2">
                         <button
                             type="submit"
-                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-xs"
+                            className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors duration-200 text-sm font-medium disabled:opacity-50"
                             disabled={saving}
                         >
                             {saving
                                 ? (modalMode === "add" ? "Adding..." : "Saving...")
-                                : (modalMode === "add" ? "Add Truck" : "Save")}
+                                : (modalMode === "add" ? "Add Truck" : "Save Changes")}
                         </button>
                         <button
                             type="button"
                             onClick={() => setModalOpen(false)}
-                            className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400 text-xs"
+                            className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors duration-200 text-sm font-medium disabled:opacity-50"
                             disabled={saving}
                         >
                             Cancel
