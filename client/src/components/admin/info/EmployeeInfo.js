@@ -6,7 +6,7 @@ import {
     deleteEmployee,
     getAllTeams,
     getAllEmployeeTeamAssignments,
-    updateEmployeeTeamAssignment
+    assignOrUpdateEmployeeTeam
 } from "../../../services/informationService";
 import { TeamBadge } from "./TeamInfo";
 
@@ -170,44 +170,41 @@ export default function EmployeeInfo() {
         setSuccessMsg("");
 
         try {
-            if (modalMode === "add") {
-                // Add employee
-                const employeeData = {
-                    name: modalData.name,
-                    role: modalData.role,
-                    contact_number: modalData.contact_number,
-                    active_flag: modalData.active_flag
-                };
+            const employeeData = {
+                name: modalData.name,
+                role: modalData.role,
+                contact_number: modalData.contact_number,
+                active_flag: modalData.active_flag
+            };
 
+            if (modalMode === "add") {
+                // Add new employee
                 const newEmp = await addEmployee(employeeData);
 
-                // Add team assignment if team is selected
+                // Assign team only if one is selected
                 if (modalData.team) {
                     console.log("Assigning team:", modalData.team);
-                    await updateEmployeeTeamAssignment(newEmp.EmployeeID, { TeamID: modalData.team });
+                    await assignOrUpdateEmployeeTeam(newEmp.EmployeeID, modalData.team);
                 }
 
                 setSuccessMsg("Employee added successfully!");
-                await loadAllData(); // Refresh all data
             } else {
-                // Update employee
-                const employeeData = {
-                    name: modalData.name,
-                    role: modalData.role,
-                    contact_number: modalData.contact_number,
-                    active_flag: modalData.active_flag
-                };
+                // Update existing employee
                 await updateEmployee(modalData.EmployeeID, employeeData);
 
-                // Update team assignment
-                if (modalData.team !== modalData.teamId) {
-                    await updateEmployeeTeamAssignment(modalData.EmployeeID, { TeamID: modalData.team });
+                // Update team only if it has changed (including null <-> value)
+                const oldTeam = modalData.teamId ?? null;
+                const newTeam = modalData.team ?? null;
+
+                if (oldTeam !== newTeam) {
+                    console.log("Team assignment changed:", oldTeam, "->", newTeam);
+                    await assignOrUpdateEmployeeTeam(modalData.EmployeeID, newTeam);
                 }
 
                 setSuccessMsg("Employee updated successfully!");
-                await loadAllData(); // Refresh all data
             }
 
+            await loadAllData(); // Refresh data
             setModalOpen(false);
         } catch (e) {
             setError(modalMode === "add"
@@ -215,6 +212,7 @@ export default function EmployeeInfo() {
                 : "Failed to update employee: " + e.message
             );
         }
+
         setSaving(false);
     }
 
