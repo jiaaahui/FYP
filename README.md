@@ -68,15 +68,3 @@ The solution is structured as a web-based platform, with potential for mobile ex
 
 - User credentials are stored encrypted, with enforced secure password policies.
 - The system is designed for usability, targeting a PSSUQ score of at least 5.0/7.0.
-
-## Contributing
-
-Contributions are welcome! Please fork the repository and submit a pull request, or open an issue for suggestions and bug reports.
-
-## License
-
-[Specify your license here, e.g., MIT License.]
-
-## Contact
-
-For questions or support, please contact [your email or GitHub profile link].
