@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../../../firebase'; // Adjust path as needed
 import {
     getAllEmployees,
     addEmployee,
@@ -14,20 +16,35 @@ const FIELD_GUIDANCE = {
     name: "First letter uppercase, e.g. Lee Tian Le",
     role: "E.g. installer, admin, etc.",
     contact_number: "Format: 01XXXXXXXX (no dashes/spaces)",
-    team: "Select the team this employee belongs to"
+    team: "Select the team this employee belongs to",
+    email: "Press Tab to accept suggested email or type your own"
 };
 
-const TABLE_KEYS = ["name", "role", "contact_number", "team", "active_flag"];
+const TABLE_KEYS = ["name", "role", "contact_number", "email", "team", "active_flag"];
 
 const FIELD_LABELS = {
     name: "Name",
     role: "Role",
     contact_number: "Contact Number",
+    email: "Email",
     team: "Team",
     active_flag: "Active Flag"
 };
 
 const ROLE_OPTIONS = ["installer", "delivery team", "warehouse loader team", "admin"];
+
+// Helper function to generate email from name
+function generateEmailFromName(name) {
+    if (!name || name.trim().length === 0) return "";
+    
+    const cleanName = name.trim().toLowerCase();
+    // Remove extra spaces and replace with dots
+    const emailName = cleanName.replace(/\s+/g, '');
+    // Remove special characters except dots
+    const sanitizedName = emailName.replace(/[^a-z0-9.]/g, '');
+    
+    return `${sanitizedName}@gmail.com`;
+}
 
 function Modal({ show, onClose, children }) {
     if (!show) return null;
@@ -64,11 +81,20 @@ function ActiveFlagBadge({ value }) {
         );
 }
 
+function PendingBadge() {
+    return (
+        <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium gap-1 text-xs">
+            <span className="w-2 h-2 bg-yellow-500 rounded-full"></span> Pending
+        </span>
+    );
+}
+
 export default function EmployeeInfo() {
     const [employees, setEmployees] = useState([]);
     const [teams, setTeams] = useState([]);
     const [employeeTeamMap, setEmployeeTeamMap] = useState(new Map());
     const [enrichedEmployees, setEnrichedEmployees] = useState([]);
+    const [pendingUsers, setPendingUsers] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState("add");
     const [modalData, setModalData] = useState({});
@@ -77,29 +103,33 @@ export default function EmployeeInfo() {
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
     const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState("employees");
+    
+    // Email suggestion states
+    const [suggestedEmail, setSuggestedEmail] = useState("");
+    const [showEmailSuggestion, setShowEmailSuggestion] = useState(false);
+    const [emailInputRef, setEmailInputRef] = useState(null);
 
     useEffect(() => {
         loadAllData();
     }, []);
 
-    // Load all data and enrich employees with team information
     async function loadAllData() {
         setLoading(true);
         try {
-            // Load all data in parallel
-            const [employeesData, teamsData, assignmentsData] = await Promise.all([
+            const [employeesData, teamsData, assignmentsData, pendingData] = await Promise.all([
                 getAllEmployees(),
                 getAllTeams(),
-                getAllEmployeeTeamAssignments()
+                getAllEmployeeTeamAssignments(),
+                loadPendingUsers()
             ]);
-
-            // Create team lookup map
+            
+            console.log("Loaded employees:", employeesData);
             const teamMap = new Map();
             teamsData.forEach(team => {
                 teamMap.set(team.TeamID, team.TeamType);
             });
 
-            // Create employee-team assignment map
             const empTeamMap = new Map();
             assignmentsData.forEach(assignment => {
                 const teamType = teamMap.get(assignment.TeamID);
@@ -109,7 +139,6 @@ export default function EmployeeInfo() {
                 });
             });
 
-            // Enrich employees with team information
             const enriched = employeesData.map(emp => ({
                 ...emp,
                 team: empTeamMap.get(emp.EmployeeID)?.TeamType || null,
@@ -120,16 +149,51 @@ export default function EmployeeInfo() {
             setTeams(teamsData);
             setEmployeeTeamMap(empTeamMap);
             setEnrichedEmployees(enriched);
+            setPendingUsers(pendingData);
         } catch (e) {
             setError("Failed to load data: " + e.message);
         }
         setLoading(false);
     }
 
+    // Load pending users from Firebase Auth users collection
+    async function loadPendingUsers() {
+        try {
+            const usersRef = collection(db, 'users');
+            const snapshot = await getDocs(usersRef);
+            const users = [];
+            
+            snapshot.forEach(doc => {
+                const userData = doc.data();
+                // Only include users with @gmail.com emails who aren't in employee database
+                if (userData.email && userData.email.endsWith('@gmail.com')) {
+                    users.push({
+                        id: doc.id,
+                        ...userData,
+                        uid: doc.id
+                    });
+                }
+            });
+            
+            // Filter out users who are already employees
+            const employeeEmails = new Set();
+            const allEmployees = await getAllEmployees();
+            allEmployees.forEach(emp => {
+                if (emp.email) employeeEmails.add(emp.email.toLowerCase());
+            });
+            
+            return users.filter(user => !employeeEmails.has(user.email.toLowerCase()));
+        } catch (error) {
+            console.error("Error loading pending users:", error);
+            return [];
+        }
+    }
+
     function openAddModal() {
         setModalMode("add");
         setModalData({
             name: "",
+            email: "",
             role: "",
             contact_number: "",
             team: "",
@@ -138,6 +202,8 @@ export default function EmployeeInfo() {
         setModalOpen(true);
         setSuccessMsg("");
         setError(null);
+        setSuggestedEmail("");
+        setShowEmailSuggestion(false);
     }
 
     function openEditModal(idx) {
@@ -151,6 +217,8 @@ export default function EmployeeInfo() {
         setModalOpen(true);
         setSuccessMsg("");
         setError(null);
+        setSuggestedEmail("");
+        setShowEmailSuggestion(false);
     }
 
     function handleModalChange(e) {
@@ -162,6 +230,34 @@ export default function EmployeeInfo() {
         }
 
         setModalData(prev => ({ ...prev, [name]: val }));
+
+        // Handle email suggestion when name changes
+        if (name === "name" && modalMode === "add") {
+            const suggested = generateEmailFromName(val);
+            setSuggestedEmail(suggested);
+            setShowEmailSuggestion(val.trim().length > 0 && !modalData.email);
+        }
+    }
+
+    // Handle Tab key press for email suggestion
+    function handleEmailKeyDown(e) {
+        if (e.key === "Tab" && showEmailSuggestion && suggestedEmail) {
+            e.preventDefault();
+            setModalData(prev => ({ ...prev, email: suggestedEmail }));
+            setShowEmailSuggestion(false);
+        }
+    }
+
+    // Handle email input focus/blur
+    function handleEmailFocus() {
+        if (modalMode === "add" && modalData.name && !modalData.email) {
+            setShowEmailSuggestion(true);
+        }
+    }
+
+    function handleEmailBlur() {
+        // Hide suggestion after a short delay to allow tab key to work
+        setTimeout(() => setShowEmailSuggestion(false), 150);
     }
 
     async function handleModalSubmit() {
@@ -173,6 +269,7 @@ export default function EmployeeInfo() {
             const employeeData = {
                 name: modalData.name,
                 role: modalData.role,
+                email: modalData.email,
                 contact_number: modalData.contact_number,
                 active_flag: modalData.active_flag
             };
@@ -233,6 +330,59 @@ export default function EmployeeInfo() {
         setSaving(false);
     }
 
+    // Approve pending user and add as employee
+    async function handleApprovePending(pendingUser) {
+        try {
+            setSaving(true);
+            setError(null);
+            
+            // Add to employee database
+            const employeeData = {
+                name: pendingUser.displayName || pendingUser.name || "",
+                email: pendingUser.email,
+                role: "", // Will need to be set by admin
+                contact_number: "",
+                active_flag: true
+            };
+            
+            await addEmployee(employeeData);
+            
+            // Update user status in Firebase users collection
+            const userRef = doc(db, 'users', pendingUser.uid);
+            await updateDoc(userRef, {
+                approved: true,
+                approvedAt: new Date(),
+                employeeStatus: 'active'
+            });
+            
+            setSuccessMsg(`${pendingUser.email} has been approved and added as an employee!`);
+            await loadAllData();
+        } catch (error) {
+            setError("Failed to approve user: " + error.message);
+        }
+        setSaving(false);
+    }
+
+    // Reject pending user
+    async function handleRejectPending(pendingUser) {
+        if (!window.confirm(`Reject ${pendingUser.email}? This will remove them from the system.`)) return;
+        
+        try {
+            setSaving(true);
+            setError(null);
+            
+            // Delete from Firebase users collection
+            const userRef = doc(db, 'users', pendingUser.uid);
+            await deleteDoc(userRef);
+            
+            setSuccessMsg(`${pendingUser.email} has been rejected and removed.`);
+            await loadAllData();
+        } catch (error) {
+            setError("Failed to reject user: " + error.message);
+        }
+        setSaving(false);
+    }
+
     // Render form field
     function renderInputField(k, val, onChange, isEdit) {
         if (k === "active_flag") {
@@ -264,6 +414,34 @@ export default function EmployeeInfo() {
                         </option>
                     ))}
                 </select>
+            );
+        }
+
+        if (k === "email") {
+            return (
+                <div className="relative">
+                    <input
+                        ref={setEmailInputRef}
+                        name={k}
+                        type="email"
+                        value={val ?? ""}
+                        onChange={onChange}
+                        onKeyDown={handleEmailKeyDown}
+                        onFocus={handleEmailFocus}
+                        onBlur={handleEmailBlur}
+                        className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="email@example.com"
+                        required
+                    />
+                    {showEmailSuggestion && suggestedEmail && modalMode === "add" && (
+                        <div className="absolute top-full left-0 right-0 bg-blue-50 border border-blue-200 rounded-md mt-1 p-2 text-sm text-blue-700 z-10">
+                            <div className="flex items-center justify-between">
+                                <span>Suggested: <strong>{suggestedEmail}</strong></span>
+                                <span className="text-xs text-blue-500">Press Tab to accept</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
             );
         }
 
@@ -328,14 +506,47 @@ export default function EmployeeInfo() {
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">Employee Management</h2>
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200 mb-6">
                 <button
-                    onClick={openAddModal}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
+                    onClick={() => setActiveTab("employees")}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === "employees"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
                 >
-                    + Add Employee
+                    Employees ({enrichedEmployees.length})
                 </button>
+                <button
+                    onClick={() => setActiveTab("pending")}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === "pending"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                >
+                    Pending Approval ({pendingUsers.length})
+                    {pendingUsers.length > 0 && (
+                        <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-800 text-xs font-medium">
+                            {pendingUsers.length}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-800">
+                    {activeTab === "employees" ? "Employee Management" : "Pending Approvals"}
+                </h2>
+                {activeTab === "employees" && (
+                    <button
+                        onClick={openAddModal}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium"
+                    >
+                        + Add Employee
+                    </button>
+                )}
             </div>
 
             {successMsg && (
@@ -350,84 +561,174 @@ export default function EmployeeInfo() {
             )}
 
             <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                #
-                            </th>
-                            {TABLE_KEYS.map(k => (
-                                <th key={k} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {FIELD_LABELS[k] || k}
+                {activeTab === "employees" ? (
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    #
                                 </th>
-                            ))}
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8">
-                                    <div className="flex items-center justify-center">
-                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                                        <span className="ml-2 text-gray-500">Loading employees...</span>
-                                    </div>
-                                </td>
+                                {TABLE_KEYS.map(k => (
+                                    <th key={k} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        {FIELD_LABELS[k] || k}
+                                    </th>
+                                ))}
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
                             </tr>
-                        ) : enrichedEmployees.length === 0 ? (
-                            <tr>
-                                <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8 text-gray-500">
-                                    No employees found.
-                                </td>
-                            </tr>
-                        ) : (
-                            enrichedEmployees.map((emp, idx) => (
-                                <tr key={emp.EmployeeID} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                        {idx + 1}
-                                    </td>
-                                    {TABLE_KEYS.map(k => (
-                                        <td className="px-4 py-3 text-sm text-gray-900" key={k}>
-                                            {k === "active_flag" ? (
-                                                <ActiveFlagBadge value={emp[k]} />
-                                            ) : k === "team" ? (
-                                                <TeamBadge teamType={emp[k]} />
-                                            ) : (
-                                                <span>{emp[k] ?? "—"}</span>
-                                            )}
-                                        </td>
-                                    ))}
-                                    <td className="px-4 py-3 text-sm">
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => openEditModal(idx)}
-                                                className="px-3 py-1 rounded-md text-blue-600 hover:bg-blue-50 transition-colors duration-200"
-                                                title="Edit Employee"
-                                                disabled={saving}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(emp.EmployeeID)}
-                                                className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
-                                                title="Delete Employee"
-                                                disabled={saving}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8">
+                                        <div className="flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                            <span className="ml-2 text-gray-500">Loading employees...</span>
                                         </div>
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                            ) : enrichedEmployees.length === 0 ? (
+                                <tr>
+                                    <td colSpan={TABLE_KEYS.length + 2} className="text-center py-8 text-gray-500">
+                                        No employees found.
+                                    </td>
+                                </tr>
+                            ) : (
+                                enrichedEmployees.map((emp, idx) => (
+                                    <tr key={emp.EmployeeID} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                            {idx + 1}
+                                        </td>
+                                        {TABLE_KEYS.map(k => (
+                                            <td className="px-4 py-3 text-sm text-gray-900" key={k}>
+                                                {k === "active_flag" ? (
+                                                    <ActiveFlagBadge value={emp[k]} />
+                                                ) : k === "team" ? (
+                                                    <TeamBadge teamType={emp[k]} />
+                                                ) : (
+                                                    <span>{emp[k] ?? "—"}</span>
+                                                )}
+                                            </td>
+                                        ))}
+                                        <td className="px-4 py-3 text-sm">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => openEditModal(idx)}
+                                                    className="px-3 py-1 rounded-md text-blue-600 hover:bg-blue-50 transition-colors duration-200"
+                                                    title="Edit Employee"
+                                                    disabled={saving}
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(emp.EmployeeID)}
+                                                    className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
+                                                    title="Delete Employee"
+                                                    disabled={saving}
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                ) : (
+                    // Pending Users Table
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    #
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Name
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Email
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Registered Date
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={6} className="text-center py-8">
+                                        <div className="flex items-center justify-center">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                            <span className="ml-2 text-gray-500">Loading pending users...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : pendingUsers.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="text-center py-8 text-gray-500">
+                                        No pending approvals.
+                                    </td>
+                                </tr>
+                            ) : (
+                                pendingUsers.map((user, idx) => (
+                                    <tr key={user.uid} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                            {idx + 1}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                            {user.displayName || user.name || "—"}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                            {user.email}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                            {user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : "—"}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                            <PendingBadge />
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleApprovePending(user)}
+                                                    className="px-3 py-1 rounded-md text-green-600 hover:bg-green-50 transition-colors duration-200"
+                                                    title="Approve User"
+                                                    disabled={saving}
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRejectPending(user)}
+                                                    className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
+                                                    title="Reject User"
+                                                    disabled={saving}
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                )}
             </div>
 
             {/* Add/Edit Employee Modal */}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';// Update this path to match your file structure
 import {
   Home,
   Users,
@@ -13,7 +14,8 @@ import {
   Bell,
   Search,
   User,
-  Calendar
+  Calendar,
+  LogOut
 } from 'lucide-react';
 import Overview from './admin/dashboard/Overview';
 import EmployeeInfo from './admin/info/EmployeeInfo';
@@ -27,10 +29,16 @@ import Schedule from './admin/Schedule';
 import Performance from './admin/dashboard/Performance';
 import EmployeePerformance from './admin/dashboard/EmployeePerformance';
 import OrderPerformance from './admin/dashboard/OrderPerformance';
+import RoleAccessControl from './admin/access/accessControl';
+import DeliverySchedule from './delivery/DelSchedule';
+import DummySchedulerPage from './delivery/Scheduler';
+import InstallationSchedule from './installer/InsSchedule';
+import WarehouseLoadingSchedule from './warehouse/truckSchedule';
 
 const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser, logout } = useAuth(); // Get currentUser and logout from AuthContext
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -75,6 +83,39 @@ const Layout = () => {
         { id: 'report', label: 'Report', path: 'report', component: Report },
       ]
     },
+    access: {
+      title: 'Access Control',
+      icon: Users,
+      route: '/access',
+      topNavItems: [
+        { id: 'access', label: 'Access Control', path: 'access', component: RoleAccessControl },
+      ]
+    },
+    delivery: {
+      title: 'Delivery Schedule',
+      icon: Users,
+      route: '/delivery',
+      topNavItems: [
+        { id: 'delivery', label: 'Delivery Schedule', path: 'delivery', component: DeliverySchedule },
+        // { id: 'scheduler', label: 'Auto Scheduler', path: 'scheduler', component: DummySchedulerPage },
+      ]
+    },
+    installation: {
+      title: 'Installation Schedule',
+      icon: Users,
+      route: '/installation',
+      topNavItems: [
+        { id: 'installation', label: 'Installation Schedule', path: 'installation', component: InstallationSchedule },
+      ]
+    },
+    warehouse: {
+      title: 'Warehouse Schedule',
+      icon: Users,
+      route: '/warehouse',
+      topNavItems: [
+        { id: 'warehouse', label: 'Warehouse Schedule', path: 'warehouse', component: WarehouseLoadingSchedule },
+      ]
+    },
     // settings: {
     //   title: 'Settings',
     //   icon: Settings,
@@ -89,6 +130,16 @@ const Layout = () => {
   };
 
   const [topNavActive, setTopNavActive] = useState('overview');
+
+  // Handle logout function
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login'); // Redirect to login page after logout
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
 
   const handleSideNavClick = (sectionKey) => {
     setActiveSection(sectionKey);
@@ -168,17 +219,23 @@ const Layout = () => {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h1 className="text-xl font-bold text-gray-800 truncate min-w-0">{currentSection.title}</h1>
             <div className="flex items-center space-x-4 flex-shrink-0">
-              {/* Notification Button */}
-              {/* <button className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                <Bell size={20} />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-              </button>
-               */}
-              {/* User Profile Button */}
-              {/* <button className="flex items-center space-x-2 p-2 text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+              {/* User Profile Button with current user info */}
+              <div className="flex items-center space-x-2 p-2 text-gray-700 rounded-lg">
                 <User size={20} className="flex-shrink-0" />
-                <span className="hidden md:block font-medium">John Doe</span>
-              </button> */}
+                <span className="hidden md:block font-medium">
+                  {currentUser?.displayName || currentUser?.email || 'User'}
+                </span>
+              </div>
+              
+              {/* Logout Button in Header (Alternative placement) */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 p-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <LogOut size={20} className="flex-shrink-0" />
+                <span className="hidden lg:block font-medium">Logout</span>
+              </button>
             </div>
           </div>
 
@@ -231,6 +288,8 @@ const Layout = () => {
               <Route path="/info" element={<EmployeeInfo />} />
               <Route path="/report" element={<Report />} />
               <Route path="/schedule" element={<Schedule />} />
+              <Route path="/access" element={<RoleAccessControl />} />
+              <Route path="/warehouse" element={<WarehouseLoadingSchedule />} />
             </Routes>
           </div>
         </div>

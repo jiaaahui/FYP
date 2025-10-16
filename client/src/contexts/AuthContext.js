@@ -9,7 +9,7 @@ import {
   sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 // Create auth context
@@ -58,29 +58,36 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Helper function to create user profile in Firestore
+  // Helper function to update user profile in Firestore Employee collection
   const createUserProfile = async (user, additionalData = {}) => {
-    if (!user) return;
-    
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-    
-    if (!userSnap.exists()) {
-      const { displayName, email } = user;
-      const createdAt = new Date();
-      
-      try {
-        await setDoc(userRef, {
-          displayName,
-          email,
-          name: displayName || '',
-          bio: '',
-          createdAt,
-          ...additionalData
-        });
-      } catch (error) {
-        console.error('Error creating user profile:', error);
-      }
+    if (!user || !user.email) return;
+
+    // Search Employee collection for document with matching email
+    const employeeQuery = query(
+      collection(db, "Employee"),
+      where("email", "==", user.email)
+    );
+    const querySnapshot = await getDocs(employeeQuery);
+
+    if (!querySnapshot.empty) {
+      // Employee exists, update the existing document
+      // const employeeDoc = querySnapshot.docs[0];
+      // try {
+      //   await updateDoc(employeeDoc.ref, {
+      //     displayName: user.displayName || "",
+      //     email: user.email,
+      //     name: user.displayName || "",
+      //     bio: "",
+      //     ...additionalData,
+      //   });
+        console.log("Updated existing employee profile:", querySnapshot.docs[0].id);
+      // } catch (error) {
+      //   console.error("Error updating employee profile:", error);
+      // }
+    } else {
+      // Employee does NOT exist. Do not create new doc unless you want to!
+      // Optionally notify or handle pending approval.
+      console.warn("No matching Employee record for email:", user.email);
     }
   };
 
@@ -93,17 +100,14 @@ export function AuthProvider({ children }) {
       // Update profile with display name
       await updateProfile(result.user, { displayName });
       
-      // Create profile in Firestore
+      // Update profile in Firestore Employee collection if email exists
       await createUserProfile(result.user, { name: displayName });
       
       return result;
     } catch (err) {
       const errorMessage = getErrorMessage(err.code);
       setError(errorMessage);
-      
-      // Show alert for signup errors
       alert(errorMessage);
-      
       throw err;
     }
   }
@@ -114,17 +118,14 @@ export function AuthProvider({ children }) {
       setError('');
       const result = await signInWithEmailAndPassword(auth, email, password);
       
-      // Ensure profile exists in Firestore (for existing users)
+      // Update profile in Firestore Employee collection if email exists
       await createUserProfile(result.user);
       
       return result;
     } catch (err) {
       const errorMessage = getErrorMessage(err.code);
       setError(errorMessage);
-      
-      // Show alert for login errors
       alert(errorMessage);
-      
       throw err;
     }
   }
@@ -149,17 +150,14 @@ export function AuthProvider({ children }) {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       
-      // Create profile in Firestore if it doesn't exist
+      // Update profile in Firestore Employee collection if email exists
       await createUserProfile(result.user);
       
       return result;
     } catch (err) {
       const errorMessage = getErrorMessage(err.code);
       setError(errorMessage);
-      
-      // Show alert for Google sign-in errors
       alert(errorMessage);
-      
       throw err;
     }
   }
@@ -169,18 +167,12 @@ export function AuthProvider({ children }) {
     try {
       setError('');
       await sendPasswordResetEmail(auth, email);
-      
-      // Show success message
       alert('Password reset email sent! Check your inbox.');
-      
       return true;
     } catch (err) {
       const errorMessage = getErrorMessage(err.code);
       setError(errorMessage);
-      
-      // Show alert for password reset errors
       alert(errorMessage);
-      
       throw err;
     }
   }
@@ -215,14 +207,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Ensure profile exists when user logs in
+        // Update profile in Firestore Employee collection if email exists
         await createUserProfile(user);
       }
       setCurrentUser(user);
       setLoading(false);
     });
-
-    // Clean up subscription
     return unsubscribe;
   }, []);
 

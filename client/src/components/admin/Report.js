@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Clock, User, FileText, Calendar } from 'lucide-react';
-// Import your actual Firebase functions here
 import {
-    getAllReports, // Should return [{ ReportID, Content, EmployeeID, Status, DateReported }]
-    getAllEmployees // Should return [{ EmployeeID, Name, Department }]
+    getAllReports,
+    getAllEmployees,
+    updateReport
 } from "../../services/informationService";
 
 export default function Report() {
@@ -39,11 +39,7 @@ export default function Report() {
 
     const updateReportStatus = async (reportId, newStatus) => {
         try {
-            // Update report status in Firebase
-            // You should have an updateDeliveryReportStatus(reportId, newStatus) function
-            // await updateDeliveryReportStatus(reportId, newStatus);
-
-            // For instant UI update (optimistic)
+            await updateReport(reportId, { Status: newStatus });
             setReports(prevReports =>
                 prevReports.map(report =>
                     report.ReportID === reportId
@@ -72,11 +68,9 @@ export default function Report() {
         }
     };
 
-    // Robust date formatter for Firestore Timestamp, number, custom string, etc.
-    function formatDate(dateReported) {
+    const formatDate = (dateReported) => {
         if (!dateReported) return '';
 
-        // Firestore Timestamp object (has toDate)
         if (dateReported && typeof dateReported.toDate === "function") {
             const d = dateReported.toDate();
             return d.toLocaleString('en-US', {
@@ -89,95 +83,6 @@ export default function Report() {
             });
         }
 
-        // If object is just a timestamp (number or numeric string)
-        if (typeof dateReported === 'number' || (typeof dateReported === 'string' && /^\d+$/.test(dateReported))) {
-            const d = new Date(Number(dateReported));
-            return d.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
-        }
-
-        // If it's a string with two lines: date line and timestamp
-        if (typeof dateReported === 'string') {
-            // Split by newline, look for line with date and line with timestamp
-            const lines = dateReported.split('\n').map(l => l.trim()).filter(Boolean);
-            let dateLine = null;
-            let timestampLine = null;
-            lines.forEach(l => {
-                if (/^\d{1,2} \w+ \d{4} at \d{2}:\d{2}:\d{2}/.test(l)) dateLine = l;
-                if (/^\d+$/.test(l)) timestampLine = l;
-            });
-
-            // Prefer the timestamp if available
-            if (timestampLine) {
-                const ts = parseInt(timestampLine, 10);
-                if (!isNaN(ts)) {
-                    const d = new Date(ts);
-                    return d.toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    });
-                }
-            }
-
-            // Parse "13 June 2025 at 00:00:00 UTC+8"
-            if (dateLine) {
-                // Extract with regex
-                const match = dateLine.match(/^(\d{1,2}) (\w+) (\d{4}) at (\d{2}):(\d{2}):(\d{2})/);
-                if (match) {
-                    const months = {
-                        January: "Jan", February: "Feb", March: "Mar", April: "Apr", May: "May", June: "Jun",
-                        July: "Jul", August: "Aug", September: "Sep", October: "Oct", November: "Nov", December: "Dec"
-                    };
-                    const day = match[1];
-                    const month = months[match[2]];
-                    const year = match[3];
-                    const hour = match[4];
-                    const minute = match[5];
-                    // Format: "13 Jun 2025, 00:00"
-                    return `${day} ${month} ${year}, ${hour}:${minute}`;
-                }
-            }
-
-            // Fallback: Try Date parsing
-            const d = new Date(dateReported);
-            if (!isNaN(d.getTime())) {
-                return d.toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                });
-            }
-
-            // Fallback: just return as string
-            return dateReported;
-        }
-
-        // If it's a Date object
-        if (dateReported instanceof Date) {
-            return dateReported.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
-        }
-
-        // Fallback default
         return String(dateReported);
     }
 
