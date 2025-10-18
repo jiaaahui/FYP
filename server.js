@@ -1,8 +1,6 @@
-// server/index.js
-// Single entry that mounts auth routes and other API routers.
-// - Enables CORS for development (adjust origin in production).
-// - Make sure you have server/routes/auth.js present (from earlier).
-// - Start with: PORT=3001 node server/index.js  (PowerShell: $env:PORT=3001; node server/index.js)
+// server.js (update)
+// Adds a lightweight request logger and clearer startup logs.
+// Ensure you start this file (node server.js) with PORT set to the value the client expects (3001).
 
 require('dotenv').config();
 const express = require('express');
@@ -19,12 +17,19 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Prisma client expects prismaClient.js in same folder
-// const prisma = require('./prismaClient'); // only needed if you use it here
+// Simple request logger for debugging
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.path);
+  next();
+});
 
 // Mount auth routes
 const authRouter = require('./routes/auth');
 app.use('/api/auth', authRouter);
+
+// Optional: mount your consolidated API if you use api.js instead of server.js
+// const api = require('./api');
+// app.use('/', api);
 
 // Example health route
 app.get('/health', (req, res) => res.json({ ok: true }));
@@ -32,6 +37,5 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
-  console.log(`Auth routes mounted: POST http://localhost:${port}/api/auth/login`);
-  console.log(`Validate: GET http://localhost:${port}/api/auth/validate`);
+  console.log(`Auth routes mounted (POST /api/auth/login, GET /api/auth/validate)`);
 });
