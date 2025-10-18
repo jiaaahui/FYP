@@ -1,119 +1,195 @@
-// Client-side API helper: generated CRUD functions for all models.
-// Usage:
-//   import { app_user } from './api/generatedApi';
-//   await app_user.list();
-//   await app_user.get('some-id');
-//   await app_user.create({ user_id: 'x', name: 'A' });
-//   await app_user.update('x', { name: 'B' });
-//   await app_user.remove('x');
-//
-// Set REACT_APP_API_BASE_URL to your server root in client .env, e.g.
-// REACT_APP_API_BASE_URL=http://localhost:4000/api
-const BASE = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000/api').replace(/\/$/, '');
+import { useAuth } from '../contexts/AuthContext';
 
-function handleResponse(res) {
-  if (res.status === 204) return null;
-  if (!res.ok) {
-    return res.json().then(body => {
-      const err = new Error(body?.error || 'API error');
-      err.status = res.status;
-      err.body = body;
-      throw err;
-    }).catch(() => {
-      const err = new Error('API error');
-      err.status = res.status;
-      throw err;
+// 🌐 Base API URL (use environment variable for flexibility)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// =======================
+// 🔒 useApi() Hook
+// =======================
+export function useApi() {
+  const { getIdToken } = useAuth();
+
+  // --- Helper: fetch with optional auth ---
+  const fetchWithAuth = async (endpoint, options = {}) => {
+    const token = await getIdToken?.();
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
     });
-  }
-  return res.json();
-}
 
-function makeModelApi(modelName, pk) {
-  const baseUrl = `${BASE}/${modelName}`;
+    const contentType = response.headers.get('Content-Type');
+    let data;
+
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || response.statusText || 'API request failed');
+    }
+
+    return data;
+  };
+
+  // --- Generic methods ---
+  const get = (endpoint) => fetchWithAuth(endpoint, { method: 'GET' });
+  const post = (endpoint, body) =>
+    fetchWithAuth(endpoint, { method: 'POST', body: JSON.stringify(body) });
+  const put = (endpoint, body) =>
+    fetchWithAuth(endpoint, { method: 'PUT', body: JSON.stringify(body) });
+  const remove = (endpoint) => fetchWithAuth(endpoint, { method: 'DELETE' });
+
+  // --- User endpoints (example) ---
+  const getUserProfile = () => get('/user/profile');
+  const updateUserProfile = (profileData) => post('/user/profile', profileData);
+
+  // --- Public or protected data examples ---
+  const getPublicData = () => get('/public');
+  const getProtectedData = () => get('/protected');
 
   return {
-    list: async () => {
-      const res = await fetch(baseUrl);
-      return handleResponse(res);
-    },
-    get: async (id) => {
-      const res = await fetch(`${baseUrl}/${encodeURIComponent(id)}`);
-      return handleResponse(res);
-    },
-    create: async (data) => {
-      const res = await fetch(baseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return handleResponse(res);
-    },
-    update: async (id, data) => {
-      const res = await fetch(`${baseUrl}/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      return handleResponse(res);
-    },
-    remove: async (id) => {
-      const res = await fetch(`${baseUrl}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      return handleResponse(res);
-    },
-    // primary key field name
-    pk,
+    get,
+    post,
+    put,
+    remove,
+    getUserProfile,
+    updateUserProfile,
+    getPublicData,
+    getProtectedData,
   };
 }
 
-// Model -> primary key map (matches generated server routing)
-export const app_user = makeModelApi('app_user', 'user_id');
-export const building = makeModelApi('building', 'id');
-export const chats = makeModelApi('chats', 'id');
-export const customer = makeModelApi('customer', 'id');
-export const employee = makeModelApi('employee', 'id');
-export const employee_team_assignment = makeModelApi('employee_team_assignment', 'id');
-export const employeeteamassignment = makeModelApi('employeeteamassignment', 'id');
-export const lorry_trip = makeModelApi('lorry_trip', 'lorry_trip_id');
-export const lorrytrip = makeModelApi('lorrytrip', 'id');
-export const order_product = makeModelApi('order_product', 'id');
-export const orderproduct = makeModelApi('orderproduct', 'id');
-export const orders = makeModelApi('orders', 'id');
-export const orders_rel = makeModelApi('orders_rel', 'order_id');
-export const product = makeModelApi('product', 'id');
-export const routing_cache = makeModelApi('routing_cache', 'id');
-export const routingcache = makeModelApi('routingcache', 'id');
-export const team = makeModelApi('team', 'id');
-export const timeslot = makeModelApi('timeslot', 'id');
-export const timeslot_order = makeModelApi('timeslot_order', 'id');
-export const truck = makeModelApi('truck', 'id');
-export const truck_zone = makeModelApi('truck_zone', 'id');
-export const truckzone = makeModelApi('truckzone', 'id');
-export const users = makeModelApi('users', 'id');
-export const zone = makeModelApi('zone', 'id');
+// =======================
+// Entity CRUD Helpers
+// =======================
 
+const apiHelper = {
+  list: (path) => fetch(`${API_BASE_URL}/${path}`).then((r) => r.json()),
+  create: (path, data) =>
+    fetch(`${API_BASE_URL}/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then((r) => r.json()),
+  update: (path, id, data) =>
+    fetch(`${API_BASE_URL}/${path}/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then((r) => r.json()),
+  remove: (path, id) =>
+    fetch(`${API_BASE_URL}/${path}/${id}`, {
+      method: 'DELETE',
+    }).then((r) => r.json()),
+};
+
+// =======================
+// Prisma-backed Models
+// =======================
+
+export const building = {
+  list: () => apiHelper.list('building'),
+  create: (data) => apiHelper.create('building', data),
+  update: (id, data) => apiHelper.update('building', id, data),
+  remove: (id) => apiHelper.remove('building', id),
+};
+
+export const zone = {
+  list: () => apiHelper.list('zone'),
+  create: (data) => apiHelper.create('zone', data),
+  update: (id, data) => apiHelper.update('zone', id, data),
+  remove: (id) => apiHelper.remove('zone', id),
+};
+
+export const employee = {
+  list: () => apiHelper.list('employee'),
+  create: (data) => apiHelper.create('employee', data),
+  update: (id, data) => apiHelper.update('employee', id, data),
+  remove: (id) => apiHelper.remove('employee', id),
+};
+
+export const team = {
+  list: () => apiHelper.list('team'),
+  create: (data) => apiHelper.create('team', data),
+  update: (id, data) => apiHelper.update('team', id, data),
+  remove: (id) => apiHelper.remove('team', id),
+};
+
+export const truck = {
+  list: () => apiHelper.list('truck'),
+  create: (data) => apiHelper.create('truck', data),
+  update: (id, data) => apiHelper.update('truck', id, data),
+  remove: (id) => apiHelper.remove('truck', id),
+};
+
+export const customer = {
+  list: () => apiHelper.list('customer'),
+  create: (data) => apiHelper.create('customer', data),
+  update: (id, data) => apiHelper.update('customer', id, data),
+  remove: (id) => apiHelper.remove('customer', id),
+};
+
+export const product = {
+  list: () => apiHelper.list('product'),
+  create: (data) => apiHelper.create('product', data),
+  update: (id, data) => apiHelper.update('product', id, data),
+  remove: (id) => apiHelper.remove('product', id),
+};
+
+export const orders = {
+  list: () => apiHelper.list('orders'),
+  create: (data) => apiHelper.create('orders', data),
+  update: (id, data) => apiHelper.update('orders', id, data),
+  remove: (id) => apiHelper.remove('orders', id),
+};
+
+export const lorrytrip = {
+  list: () => apiHelper.list('lorrytrip'),
+  create: (data) => apiHelper.create('lorrytrip', data),
+  update: (id, data) => apiHelper.update('lorrytrip', id, data),
+  remove: (id) => apiHelper.remove('lorrytrip', id),
+};
+
+export const routingcache = {
+  list: () => apiHelper.list('routingcache'),
+  create: (data) => apiHelper.create('routingcache', data),
+  update: (id, data) => apiHelper.update('routingcache', id, data),
+  remove: (id) => apiHelper.remove('routingcache', id),
+};
+
+export const timeslot = {
+  list: () => apiHelper.list('timeslot'),
+  create: (data) => apiHelper.create('timeslot', data),
+  update: (id, data) => apiHelper.update('timeslot', id, data),
+  remove: (id) => apiHelper.remove('timeslot', id),
+};
+
+// =======================
+// Default export
+// =======================
 export default {
-  app_user,
+  useApi,
   building,
-  chats,
-  customer,
-  employee,
-  employee_team_assignment,
-  employeeteamassignment,
-  lorry_trip,
-  lorrytrip,
-  order_product,
-  orderproduct,
-  orders,
-  orders_rel,
-  product,
-  routing_cache,
-  routingcache,
-  team,
-  timeslot,
-  timeslot_order,
-  truck,
-  truck_zone,
-  truckzone,
-  users,
   zone,
+  employee,
+  team,
+  truck,
+  customer,
+  product,
+  orders,
+  lorrytrip,
+  routingcache,
+  timeslot,
 };
