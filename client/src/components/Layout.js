@@ -43,79 +43,79 @@ const Layout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const navigationData = {
-    dashboard: {
-      title: 'Dashboard',
-      icon: Home,
-      route: '/dashboard',
-      topNavItems: [
-        { id: 'overview', label: 'Overview', path: 'overview', component: Overview },
-        { id: 'employee-performance', label: 'Employee Performance', path: 'employee-performance', component: EmployeePerformance },
-        { id: 'orders', label: 'Orders', path: 'order', component: OrderPerformance },
-        // { id: 'overall', label: 'Overall', path: 'overall', component: Performance },
-      ]
-    },
-    documents: {
-      title: 'Schedule',
-      icon: Calendar,
-      route: '/schedule',
-      topNavItems: [
-        { id: 'schedule', label: 'Schedule', path: 'schedule', component: Schedule },
-      ]
-    },
+    // dashboard: {
+    //   title: 'Dashboard',
+    //   icon: Home,
+    //   route: '/dashboard',
+    //   topNavItems: [
+    //     { id: 'overview', label: 'Overview', path: 'overview', component: Overview },
+    //     { id: 'employee-performance', label: 'Employee Performance', path: 'employee-performance', component: EmployeePerformance },
+    //     { id: 'orders', label: 'Orders', path: 'order', component: OrderPerformance },
+    //     // { id: 'overall', label: 'Overall', path: 'overall', component: Performance },
+    //   ]
+    // },
+    // documents: {
+    //   title: 'Schedule',
+    //   icon: Calendar,
+    //   route: '/schedule',
+    //   topNavItems: [
+    //     { id: 'schedule', label: 'Schedule', path: 'schedule', component: Schedule },
+    //   ]
+    // },
     products: {
       title: 'Information',
       icon: FileText,
       route: '/info',
       topNavItems: [
         { id: 'employee', label: 'Employee', path: 'employee', component: EmployeeInfo },
-        { id: 'team', label: 'Team', path: 'team', component: TeamInfo },
-        { id: 'building', label: 'Building', path: 'building', component: BuildingInfo },
-        { id: 'product', label: 'Product', path: 'product', component: ProductInfo },
-        { id: 'truck', label: 'Truck', path: 'truck', component: TruckInfo },
-        { id: 'truckzone', label: 'TruckZone', path: 'truckzone', component: TruckZoneInfo },
+        // { id: 'team', label: 'Team', path: 'team', component: TeamInfo },
+        // { id: 'building', label: 'Building', path: 'building', component: BuildingInfo },
+        // { id: 'product', label: 'Product', path: 'product', component: ProductInfo },
+        // { id: 'truck', label: 'Truck', path: 'truck', component: TruckInfo },
+        // { id: 'truckzone', label: 'TruckZone', path: 'truckzone', component: TruckZoneInfo },
       ]
     },
-    users: {
-      title: 'Report',
-      icon: Users,
-      route: '/report',
-      topNavItems: [
-        { id: 'report', label: 'Report', path: 'report', component: Report },
-      ]
-    },
-    access: {
-      title: 'Access Control',
-      icon: Users,
-      route: '/access',
-      topNavItems: [
-        { id: 'access', label: 'Access Control', path: 'access', component: RoleAccessControl },
-      ]
-    },
-    delivery: {
-      title: 'Delivery Schedule',
-      icon: Users,
-      route: '/delivery',
-      topNavItems: [
-        { id: 'delivery', label: 'Delivery Schedule', path: 'delivery', component: DeliverySchedule },
-        // { id: 'scheduler', label: 'Auto Scheduler', path: 'scheduler', component: DummySchedulerPage },
-      ]
-    },
-    installation: {
-      title: 'Installation Schedule',
-      icon: Users,
-      route: '/installation',
-      topNavItems: [
-        { id: 'installation', label: 'Installation Schedule', path: 'installation', component: InstallationSchedule },
-      ]
-    },
-    warehouse: {
-      title: 'Warehouse Schedule',
-      icon: Users,
-      route: '/warehouse',
-      topNavItems: [
-        { id: 'warehouse', label: 'Warehouse Schedule', path: 'warehouse', component: WarehouseLoadingSchedule },
-      ]
-    },
+    // users: {
+    //   title: 'Report',
+    //   icon: Users,
+    //   route: '/report',
+    //   topNavItems: [
+    //     { id: 'report', label: 'Report', path: 'report', component: Report },
+    //   ]
+    // },
+    // access: {
+    //   title: 'Access Control',
+    //   icon: Users,
+    //   route: '/access',
+    //   topNavItems: [
+    //     { id: 'access', label: 'Access Control', path: 'access', component: RoleAccessControl },
+    //   ]
+    // },
+    // delivery: {
+    //   title: 'Delivery Schedule',
+    //   icon: Users,
+    //   route: '/delivery',
+    //   topNavItems: [
+    //     { id: 'delivery', label: 'Delivery Schedule', path: 'delivery', component: DeliverySchedule },
+    //     // { id: 'scheduler', label: 'Auto Scheduler', path: 'scheduler', component: DummySchedulerPage },
+    //   ]
+    // },
+    // installation: {
+    //   title: 'Installation Schedule',
+    //   icon: Users,
+    //   route: '/installation',
+    //   topNavItems: [
+    //     { id: 'installation', label: 'Installation Schedule', path: 'installation', component: InstallationSchedule },
+    //   ]
+    // },
+    // warehouse: {
+    //   title: 'Warehouse Schedule',
+    //   icon: Users,
+    //   route: '/warehouse',
+    //   topNavItems: [
+    //     { id: 'warehouse', label: 'Warehouse Schedule', path: 'warehouse', component: WarehouseLoadingSchedule },
+    //   ]
+    // },
     // settings: {
     //   title: 'Settings',
     //   icon: Settings,
