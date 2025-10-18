@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model app_user {
+  user_id               String    @id
+  name                  String?
+  display_name          String?
+  email                 String?
+  phone                 String?
+  address               String?
+  city                  String?
+  postcode              String?
+  state                 String?
+  notifications_enabled Boolean?
+  created_at            DateTime? @db.Timestamptz(6)
+  updated_at            DateTime? @db.Timestamptz(6)
+  data                  Json?
+}
+
+model building {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_building_created_at")
+}
+
+model chats {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_chats_created_at")
+}
+
+model customer {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_customer_created_at")
+}
+
+model employee {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_employee_created_at")
+}
+
+model employee_team_assignment {
+  id          String    @id
+  team_id     String?
+  employee_id String?
+  assigned_at DateTime? @db.Timestamptz(6)
+  data        Json?
+}
+
+model employeeteamassignment {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_employeeteamassignment_created_at")
+}
+
+model lorry_trip {
+  lorry_trip_id     String    @id
+  truck_id          String?
+  delivery_team_id  String?
+  warehouse_team_id String?
+  date              DateTime? @db.Date
+  created_at        DateTime? @db.Timestamptz(6)
+  data              Json?
+}
+
+model lorrytrip {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_lorrytrip_created_at")
+}
+
+model order_product {
+  id         String  @id
+  order_id   String?
+  product_id String?
+  quantity   Int?
+  data       Json?
+}
+
+model orderproduct {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_orderproduct_created_at")
+}
+
+model orders {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_orders_created_at")
+}
+
+model orders_rel {
+  order_id              String    @id
+  customer_id           String?
+  building_id           String?
+  employee_id           String?
+  delivery_team_id      String?
+  time_slot_id          String?
+  customer_rating       Decimal?  @db.Decimal
+  number_of_attempts    Int?
+  order_status          String?
+  delay_reason          String?
+  proof_of_delivery_url String?
+  customer_feedback     String?
+  created_at            DateTime? @db.Timestamptz(6)
+  updated_at            DateTime? @db.Timestamptz(6)
+  scheduled_start       DateTime? @db.Timestamptz(6)
+  scheduled_end         DateTime? @db.Timestamptz(6)
+  actual_start          DateTime? @db.Timestamptz(6)
+  actual_end            DateTime? @db.Timestamptz(6)
+  actual_arrival        DateTime? @db.Timestamptz(6)
+  data                  Json?
+}
+
+model product {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_product_created_at")
+}
+
+model routing_cache {
+  id               String    @id
+  origin_id        String?
+  dest_id          String?
+  mode             String?
+  duration_seconds Int?
+  distance_meters  Int?
+  fetched_at       DateTime? @db.Timestamptz(6)
+  data             Json?
+}
+
+model routingcache {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_routingcache_created_at")
+}
+
+model team {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_team_created_at")
+}
+
+model timeslot {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_timeslot_created_at")
+}
+
+model timeslot_order {
+  id              String    @id
+  timeslot_id     String?
+  order_id        String?
+  scheduled_start DateTime? @db.Timestamptz(6)
+  scheduled_end   DateTime? @db.Timestamptz(6)
+  sequence_no     Int?
+  data            Json?
+}
+
+model truck {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_truck_created_at")
+}
+
+model truck_zone {
+  id              String   @id
+  truck_id        String?
+  zone_id         String?
+  is_primary_zone Boolean?
+  data            Json?
+}
+
+model truckzone {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_truckzone_created_at")
+}
+
+model users {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_users_created_at")
+}
+
+model zone {
+  id         String    @id
+  data       Json?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([created_at], map: "idx_zone_created_at")
+}
