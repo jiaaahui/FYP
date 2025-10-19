@@ -18,9 +18,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             
             {/* Protected Routes with Navigation Layout */}
-            <Route element={<ProtectedRoute />}>
+            {/* <Route element={<ProtectedRoute />}> */}
               <Route path="/*" element={<Layout />} />
-            </Route>
+            {/* </Route> */}
             
             {/* Default Route */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

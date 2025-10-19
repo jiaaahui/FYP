@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { TeamBadge } from "./TeamInfo";
 
-// Field label / guidance constants (same as before)
+// Field label / guidance constants
 const FIELD_GUIDANCE = {
   name: "First letter uppercase, e.g. Lee Tian Le",
   role: "E.g. installer, admin, etc.",
@@ -56,20 +56,11 @@ function ActiveFlagBadge({ value }) {
   );
 }
 
-function PendingBadge() {
-  return (
-    <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium gap-1 text-xs">
-      <span className="w-2 h-2 bg-yellow-500 rounded-full"></span> Pending
-    </span>
-  );
-}
-
 export default function EmployeeInfo() {
   const [employees, setEmployees] = useState([]);
   const [teams, setTeams] = useState([]);
   const [employeeTeamMap, setEmployeeTeamMap] = useState(new Map());
   const [enrichedEmployees, setEnrichedEmployees] = useState([]);
-  const [pendingUsers, setPendingUsers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add");
   const [modalData, setModalData] = useState({});
@@ -78,7 +69,6 @@ export default function EmployeeInfo() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("employees");
 
   // Email suggestion states
   const [suggestedEmail, setSuggestedEmail] = useState("");
@@ -87,17 +77,17 @@ export default function EmployeeInfo() {
 
   useEffect(() => {
     loadAllData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadAllData() {
     setLoading(true);
     try {
       // Fetch employees, teams and assignments from your Postgres REST API
-      const [employeesRes, teamsRes, assignmentsRes, pendingData] = await Promise.all([
+      const [employeesRes, teamsRes, assignmentsRes] = await Promise.all([
         fetch('/api/employees').then(r => r.json()),
         fetch('/api/teams').then(r => r.json()),
-        fetch('/api/employee-team-assignments').then(r => r.json()).catch(() => []),
-        loadPendingUsers()
+        fetch('/api/employee-team-assignments').then(r => r.json()).catch(() => [])
       ]);
 
       const teamMap = new Map();
@@ -124,33 +114,11 @@ export default function EmployeeInfo() {
       setTeams(teamsRes || []);
       setEmployeeTeamMap(empTeamMap);
       setEnrichedEmployees(enriched);
-      setPendingUsers(pendingData);
     } catch (e) {
       console.error("loadAllData error:", e);
       setError("Failed to load data: " + (e.message || e));
     }
     setLoading(false);
-  }
-
-  // Load pending users from Firebase users collection (unchanged)
-  async function loadPendingUsers() {
-    try {
-      const usersRef = collection(db, 'users');
-      const snapshot = await getDocs(usersRef);
-      const users = [];
-      snapshot.forEach(docSnap => {
-        const userData = docSnap.data();
-        if (userData.email && userData.email.endsWith('@gmail.com')) {
-          users.push({ id: docSnap.id, ...userData, uid: docSnap.id });
-        }
-      });
-
-      const employeeEmails = new Set((await fetch('/api/employees').then(r => r.json())).map(e => (e.email||'').toLowerCase()));
-      return users.filter(u => !employeeEmails.has((u.email||'').toLowerCase()));
-    } catch (err) {
-      console.error("Error loading pending users:", err);
-      return [];
-    }
   }
 
   function openAddModal() {
@@ -177,7 +145,6 @@ export default function EmployeeInfo() {
     const employee = enrichedEmployees[idx];
     setModalData({
       ...employee,
-      // when editing, do not show password; password only set if admin supplies new one
       password: "",
       team: employee.teamId || ""
     });
@@ -217,7 +184,6 @@ export default function EmployeeInfo() {
     setTimeout(() => setShowEmailSuggestion(false), 150);
   }
 
-  // Client-side email duplication check
   function isDuplicateEmail(email) {
     if (!email) return false;
     const lower = email.toLowerCase();
@@ -230,7 +196,6 @@ export default function EmployeeInfo() {
     setSuccessMsg("");
 
     try {
-      // Validate password on add
       if (modalMode === "add") {
         if (!modalData.password || modalData.password.length < 6) {
           setError("Password is required and must be at least 6 characters.");
@@ -248,7 +213,6 @@ export default function EmployeeInfo() {
           return;
         }
       } else {
-        // edit mode: if email changed, check duplicate
         const initial = enrichedEmployees[editIdx];
         if (modalData.email && modalData.email !== initial.email && isDuplicateEmail(modalData.email)) {
           setError("Email already exists. Choose another email.");
@@ -257,7 +221,6 @@ export default function EmployeeInfo() {
         }
       }
 
-      // Build payload for server
       const payload = {
         name: modalData.name,
         email: modalData.email,
@@ -285,7 +248,6 @@ export default function EmployeeInfo() {
         }
         setSuccessMsg("Employee added successfully!");
       } else {
-        // edit: include password only if provided (admin wants to change)
         if (modalData.password && modalData.password.length >= 6) {
           payload.password = modalData.password;
         }
@@ -312,7 +274,6 @@ export default function EmployeeInfo() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ employeeID: (await res.json()).employeeID || modalData.employeeID || modalData.employeeId, teamID: modalData.team })
         }).catch(err => {
-          // non-fatal; report
           console.warn('team-assignment failed', err);
         });
       }
@@ -341,72 +302,6 @@ export default function EmployeeInfo() {
       setError("Failed to delete employee: " + e.message);
     }
     setSaving(false);
-  }
-
-  async function handleApprovePending(pendingUser) {
-    try {
-      setSaving(true);
-      setError(null);
-      const employeeData = {
-        name: pendingUser.displayName || pendingUser.name || "",
-        email: pendingUser.email,
-        role: "", // admin must set role
-        contact_number: "",
-        active_flag: true,
-        password: Math.random().toString(36).slice(2, 10) // temporary random password - admin should change/reset
-      };
-
-      // Quick duplicate check
-      if (isDuplicateEmail(employeeData.email)) {
-        setError("Email already exists; cannot approve.");
-        setSaving(false);
-        return;
-      }
-
-      const res = await fetch('/api/employees', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(employeeData)
-      });
-      if (res.status === 409) {
-        const body = await res.json();
-        throw new Error(body.error || 'Email already exists');
-      }
-      if (!res.ok) throw new Error('Failed to add employee');
-
-      // update firebase user doc to mark approved
-      const userRef = doc(db, 'users', pendingUser.uid);
-      await updateDoc(userRef, {
-        approved: true,
-        approvedAt: new Date(),
-        employeeStatus: 'active'
-      });
-
-      setSuccessMsg(`${pendingUser.email} has been approved and added as an employee!`);
-      await loadAllData();
-    } catch (error) {
-      console.error(error);
-      setError("Failed to approve user: " + (error.message || error));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRejectPending(pendingUser) {
-    if (!window.confirm(`Reject ${pendingUser.email}? This will remove them from the system.`)) return;
-    try {
-      setSaving(true);
-      setError(null);
-      const userRef = doc(db, 'users', pendingUser.uid);
-      await deleteDoc(userRef);
-      setSuccessMsg(`${pendingUser.email} has been rejected and removed.`);
-      await loadAllData();
-    } catch (error) {
-      console.error(error);
-      setError("Failed to reject user: " + (error.message || error));
-    } finally {
-      setSaving(false);
-    }
   }
 
   // Render input field (adds password input in add modal)
@@ -478,71 +373,44 @@ export default function EmployeeInfo() {
   // Render
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6">
-        <button onClick={() => setActiveTab("employees")} className={`px-4 py-2 ${activeTab==='employees' ? 'border-blue-500 text-blue-600 border-b-2' : 'text-gray-500'}`}>Employees ({enrichedEmployees.length})</button>
-        <button onClick={() => setActiveTab("pending")} className={`px-4 py-2 ${activeTab==='pending' ? 'border-blue-500 text-blue-600 border-b-2' : 'text-gray-500'}`}>Pending ({pendingUsers.length})</button>
-      </div>
-
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-gray-800">{activeTab === 'employees' ? 'Employee Management' : 'Pending Approvals'}</h2>
-        {activeTab === 'employees' && <button onClick={openAddModal} className="bg-blue-600 text-white px-4 py-2 rounded-md">+ Add Employee</button>}
+        <h2 className="text-xl font-semibold text-gray-800">Employee Management</h2>
+        <button onClick={openAddModal} className="bg-blue-600 text-white px-4 py-2 rounded-md">+ Add Employee</button>
       </div>
 
       {successMsg && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">{successMsg}</div>}
       {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
 
       <div className="overflow-x-auto">
-        {activeTab === 'employees' ? (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50"><tr>
-              <th>#</th>
-              {TABLE_KEYS.map(k => <th key={k}>{FIELD_LABELS[k] || k}</th>)}
-              <th>Actions</th>
-            </tr></thead>
-            <tbody>
-              {loading ? <tr><td colSpan={TABLE_KEYS.length+2}>Loading...</td></tr> :
-                enrichedEmployees.length === 0 ? <tr><td colSpan={TABLE_KEYS.length+2}>No employees</td></tr> :
-                enrichedEmployees.map((emp, idx) => (
-                  <tr key={emp.employeeID || emp.EmployeeID} className="hover:bg-gray-50">
-                    <td>{idx+1}</td>
-                    {TABLE_KEYS.map(k => (
-                      <td key={k}>
-                        {k === 'active_flag' ? <ActiveFlagBadge value={emp.active_flag} /> :
-                          k === 'team' ? <TeamBadge teamType={emp.team} /> : <span>{emp[k] ?? '—'}</span>}
-                      </td>
-                    ))}
-                    <td>
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditModal(idx)} className="text-blue-600">Edit</button>
-                        <button onClick={() => handleDelete(emp.employeeID || emp.EmployeeID)} className="text-red-600">Delete</button>
-                      </div>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50"><tr>
+            <th>#</th>
+            {TABLE_KEYS.map(k => <th key={k}>{FIELD_LABELS[k] || k}</th>)}
+            <th>Actions</th>
+          </tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={TABLE_KEYS.length+2}>Loading...</td></tr> :
+              enrichedEmployees.length === 0 ? <tr><td colSpan={TABLE_KEYS.length+2}>No employees</td></tr> :
+              enrichedEmployees.map((emp, idx) => (
+                <tr key={emp.employeeID || emp.EmployeeID} className="hover:bg-gray-50">
+                  <td>{idx+1}</td>
+                  {TABLE_KEYS.map(k => (
+                    <td key={k}>
+                      {k === 'active_flag' ? <ActiveFlagBadge value={emp.active_flag} /> :
+                        k === 'team' ? <TeamBadge teamType={emp.team} /> : <span>{emp[k] ?? '—'}</span>}
                     </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        ) : (
-          // pending approvals table (same as previous)
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50"><tr><th>#</th><th>Name</th><th>Email</th><th>Registered Date</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>
-              {loading ? <tr><td colSpan={6}>Loading...</td></tr> : pendingUsers.length === 0 ? <tr><td colSpan={6}>No pending</td></tr> :
-                pendingUsers.map((user, idx) => (
-                  <tr key={user.uid}><td>{idx+1}</td><td>{user.displayName||user.name||'—'}</td><td>{user.email}</td><td>{user.createdAt ? new Date(user.createdAt.seconds*1000).toLocaleDateString() : '—'}</td><td><PendingBadge/></td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleApprovePending(user)} className="text-green-600">Approve</button>
-                        <button onClick={() => handleRejectPending(user)} className="text-red-600">Reject</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        )}
+                  ))}
+                  <td>
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditModal(idx)} className="text-blue-600">Edit</button>
+                      <button onClick={() => handleDelete(emp.employeeID || emp.EmployeeID)} className="text-red-600">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
       </div>
 
       <Modal show={modalOpen} onClose={() => setModalOpen(false)}>

@@ -1,5 +1,11 @@
+// client/src/components/Login.js
+// Modified to use the simplified server login that returns an employee object on success.
+// No token usage. On success we persist minimal employee info to localStorage and navigate.
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+
+const API_BASE = process.env.REACT_APP_API_BASE || ''; // set to e.g. 'http://localhost:3001' if needed
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -8,36 +14,12 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // On mount: check for existing token/session and validate it with the server
+  // If an employee is already present in localStorage, assume logged-in and redirect
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (!token) return;
-
-    // validate token with backend; expect 200 if valid
-    (async () => {
-      try {
-        setLoading(true);
-        const resp = await fetch('/api/auth/validate', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        });
-        if (resp.ok) {
-          // token valid — navigate straight to dashboard
-          navigate('/dashboard');
-        } else {
-          // invalid/expired token — remove it
-          localStorage.removeItem('authToken');
-        }
-      } catch (err) {
-        console.warn('Token validation failed', err);
-        localStorage.removeItem('authToken');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    const emp = localStorage.getItem('employee');
+    if (emp) {
+      navigate('/dashboard');
+    }
   }, [navigate]);
 
   async function handleSubmit(e) {
@@ -47,8 +29,7 @@ function Login() {
     setLoading(true);
 
     try {
-      // POST to server auth endpoint that verifies employee credentials against Employee table
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password })
@@ -58,9 +39,9 @@ function Login() {
         setError('Incorrect email or password.');
         return;
       }
-      if (res.status === 409) {
+      if (res.status === 400) {
         const body = await res.json().catch(() => ({}));
-        setError(body.error || 'Conflict: email duplicated');
+        setError(body.error || 'Missing email or password.');
         return;
       }
       if (!res.ok) {
@@ -70,18 +51,14 @@ function Login() {
       }
 
       const data = await res.json();
-      // Expecting { token: '...', employee: { ... } }
-      if (!data || !data.token) {
+      // Expecting { success: true, employee: { ... } }
+      if (!data || !data.success || !data.employee) {
         setError('Invalid server response.');
         return;
       }
 
-      // Save token (or session info). In production, prefer secure, httpOnly cookie set by server.
-      localStorage.setItem('authToken', data.token);
-
-      // Optionally save minimal user info
-      if (data.employee) localStorage.setItem('employee', JSON.stringify(data.employee));
-
+      // Persist minimal employee info (no token). In production prefer server session/cookie.
+      localStorage.setItem('employee', JSON.stringify(data.employee));
       navigate('/dashboard');
     } catch (err) {
       console.error('Login error', err);
@@ -90,36 +67,6 @@ function Login() {
       setLoading(false);
     }
   }
-
-  // Trigger password-reset flow via server (server should send reset email or handle policy)
-  // async function handlePasswordReset() {
-  //   setError('');
-  //   if (!email) {
-  //     setError('Please enter your email address first.');
-  //     return;
-  //   }
-
-  //   try {
-  //     setLoading(true);
-  //     const res = await fetch('/api/auth/reset-request', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-  //       body: JSON.stringify({ email: email.trim() })
-  //     });
-
-  //     if (res.ok) {
-  //       alert('Password reset initiated. Check your inbox for instructions.');
-  //     } else {
-  //       const body = await res.json().catch(() => ({}));
-  //       setError(body.error || 'Failed to request password reset.');
-  //     }
-  //   } catch (err) {
-  //     console.error('reset error', err);
-  //     setError('Failed to reset password: ' + (err.message || 'unknown error'));
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // }
 
   return (
     <div className="auth-container">
@@ -152,21 +99,14 @@ function Login() {
             />
           </div>
 
-          {/* <div className="text-right mb-3">
-            <button
-              type="button"
-              onClick={handlePasswordReset}
-              className="btn btn-link p-0"
-              disabled={loading}
-            >
-              Forgot Password?
-            </button>
-          </div> */}
-
           <button disabled={loading} type="submit" className="btn btn-primary w-100">
             {loading ? 'Signing in...' : 'Log In'}
           </button>
         </form>
+
+        <div className="text-center mt-3">
+          Need an account? <Link to="/signup">Sign Up</Link>
+        </div>
       </div>
     </div>
   );

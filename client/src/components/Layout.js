@@ -34,6 +34,7 @@ import DeliverySchedule from './delivery/DelSchedule';
 import DummySchedulerPage from './delivery/Scheduler';
 import InstallationSchedule from './installer/InsSchedule';
 import WarehouseLoadingSchedule from './warehouse/truckSchedule';
+import Login from './Login';
 
 const Layout = () => {
   const navigate = useNavigate();
@@ -43,17 +44,17 @@ const Layout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const navigationData = {
-    // dashboard: {
-    //   title: 'Dashboard',
-    //   icon: Home,
-    //   route: '/dashboard',
-    //   topNavItems: [
+    dashboard: {
+      title: 'Dashboard',
+      icon: Home,
+      route: '/dashboard',
+      topNavItems: [
     //     { id: 'overview', label: 'Overview', path: 'overview', component: Overview },
     //     { id: 'employee-performance', label: 'Employee Performance', path: 'employee-performance', component: EmployeePerformance },
     //     { id: 'orders', label: 'Orders', path: 'order', component: OrderPerformance },
     //     // { id: 'overall', label: 'Overall', path: 'overall', component: Performance },
-    //   ]
-    // },
+      ]
+    },
     // documents: {
     //   title: 'Schedule',
     //   icon: Calendar,
@@ -290,6 +291,7 @@ const Layout = () => {
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/access" element={<RoleAccessControl />} />
               <Route path="/warehouse" element={<WarehouseLoadingSchedule />} />
+              <Route path="/login" element={<Login />} />
             </Routes>
           </div>
         </div>

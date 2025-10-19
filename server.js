@@ -28,8 +28,8 @@ const authRouter = require('./routes/auth');
 app.use('/api/auth', authRouter);
 
 // Optional: mount your consolidated API if you use api.js instead of server.js
-// const api = require('./api');
-// app.use('/', api);
+const api = require('./api');
+app.use('/', api);
 
 // Example health route
 app.get('/health', (req, res) => res.json({ ok: true }));
