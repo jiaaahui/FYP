@@ -2,28 +2,31 @@ import React, { useEffect, useState } from 'react';
 import {
   getAllEmployees, getAllOrders
 } from '../../../services/informationService';
-import { Users, Star, Phone, Badge, TrendingUp } from 'lucide-react';
+import { Users, Star, Phone, Badge, TrendingUp, DollarSign } from 'lucide-react';
 
 export default function EmployeePerformance() {
   const [employees, setEmployees] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [incentivePerOrder, setIncentivePerOrder] = useState(5); // 💰 default incentive per order
 
   useEffect(() => {
     getAllEmployees().then(setEmployees);
     getAllOrders().then(setOrders);
   }, []);
 
-  // Calculate top performers
+  // Calculate stats for each employee
   const employeeStats = employees.map(employee => {
     const employeeOrders = orders.filter(order => order.EmployeeID === employee.EmployeeID);
-    const avgRating = employeeOrders.length > 0 
-      ? employeeOrders.reduce((sum, order) => sum + (order.CustomerRating || 0), 0) / employeeOrders.length 
+    const avgRating = employeeOrders.length > 0
+      ? employeeOrders.reduce((sum, order) => sum + (order.CustomerRating || 0), 0) / employeeOrders.length
       : 0;
-    
+    const totalIncentive = employeeOrders.length * incentivePerOrder;
+
     return {
       ...employee,
       orderCount: employeeOrders.length,
-      avgRating: avgRating,
+      avgRating,
+      totalIncentive,
       orders: employeeOrders
     };
   });
@@ -35,10 +38,27 @@ export default function EmployeePerformance() {
 
   return (
     <div className="space-y-6">
-      {/* Header Section with Summary Stats */}
+
+      {/* 🔧 Incentive Control Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row md:items-center md:justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-3 md:mb-0">
+          <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+          Incentive Settings
+        </h2>
+        <div className="flex items-center space-x-3">
+          <label className="text-sm text-gray-600">Incentive per Order (RM):</label>
+          <input
+            type="number"
+            min="0"
+            value={incentivePerOrder}
+            onChange={e => setIncentivePerOrder(Number(e.target.value))}
+            className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Top Performers Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      
-        {/* Top Performers */}
         {topPerformers.length > 0 && (
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -63,6 +83,7 @@ export default function EmployeePerformance() {
                     </div>
                     <p className="text-sm text-gray-600 mb-2">{employee.role || 'Staff'}</p>
                     <p className="text-lg font-bold text-blue-600">{employee.orderCount} orders</p>
+                    <p className="text-sm text-green-700 mt-1">Incentive: RM {employee.totalIncentive.toFixed(2)}</p>
                   </div>
                 </div>
               ))}
@@ -71,7 +92,7 @@ export default function EmployeePerformance() {
         )}
       </div>
 
-      {/* Employee Cards Grid */}
+      {/* Employee Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {employeeStats.map((employee) => (
           <div key={employee.EmployeeID} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
@@ -81,8 +102,8 @@ export default function EmployeePerformance() {
                   <div className="flex items-center mb-2">
                     <h4 className="font-semibold text-gray-900 text-lg">{employee.name}</h4>
                     <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      employee.ActiveFlag !== false 
-                        ? 'bg-green-100 text-green-800' 
+                      employee.ActiveFlag !== false
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
                     }`}>
                       {employee.ActiveFlag !== false ? 'Active' : 'Inactive'}
@@ -102,19 +123,20 @@ export default function EmployeePerformance() {
               </div>
 
               {/* Performance Metrics */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">{employee.orderCount}</p>
-                  <p className="text-xs text-gray-600 mt-1">Orders Completed</p>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xl font-bold text-blue-600">{employee.orderCount}</p>
+                  <p className="text-xs text-gray-600 mt-1">Orders</p>
                 </div>
-                <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                  <div className="flex items-center justify-center mb-1">
-                    <Star className="h-4 w-4 text-yellow-500 mr-1" />
-                    <p className="text-2xl font-bold text-yellow-600">
-                      {employee.avgRating > 0 ? employee.avgRating.toFixed(1) : 'N/A'}
-                    </p>
-                  </div>
-                  <p className="text-xs text-gray-600">Avg Rating</p>
+                <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                  <p className="text-xl font-bold text-yellow-600">
+                    {employee.avgRating > 0 ? employee.avgRating.toFixed(1) : 'N/A'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">Avg Rating</p>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <p className="text-xl font-bold text-green-600">RM {employee.totalIncentive.toFixed(2)}</p>
+                  <p className="text-xs text-gray-600 mt-1">Incentive</p>
                 </div>
               </div>
 
@@ -129,7 +151,7 @@ export default function EmployeePerformance() {
         ))}
       </div>
 
-      {/* Detailed Orders Table */}
+      {/* Existing Orders Table (unchanged) */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Order Details by Employee</h3>
@@ -143,21 +165,11 @@ export default function EmployeePerformance() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Order ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Employee
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rating
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer Feedback
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Feedback</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -165,16 +177,14 @@ export default function EmployeePerformance() {
                 const employee = employees.find(e => e.EmployeeID === order.EmployeeID);
                 return (
                   <tr key={order.OrderID} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {order.OrderID}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.OrderID}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
                       <div>
                         <div className="font-medium">{employee?.name || 'Unknown'}</div>
                         <div className="text-xs text-gray-500">ID: {order.EmployeeID}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-600">
                       {order.CustomerRating ? (
                         <div className="flex items-center">
                           <Star className="h-4 w-4 text-yellow-400 mr-1 fill-current" />
@@ -184,14 +194,12 @@ export default function EmployeePerformance() {
                         <span className="text-gray-400">No rating</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
-                      <div className="truncate" title={order.CustomerFeedback}>
-                        {order.CustomerFeedback || 'No feedback provided'}
-                      </div>
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={order.CustomerFeedback}>
+                      {order.CustomerFeedback || 'No feedback provided'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        order.OrderStatus === 'Completed' 
+                        order.OrderStatus === 'Completed'
                           ? 'bg-green-100 text-green-800'
                           : order.OrderStatus === 'Pending'
                           ? 'bg-yellow-100 text-yellow-800'
@@ -209,4 +217,4 @@ export default function EmployeePerformance() {
       </div>
     </div>
   );
-};
+}

@@ -12,15 +12,7 @@ import {
 } from "../../../services/informationService";
 import { TeamBadge } from "./TeamInfo";
 
-const FIELD_GUIDANCE = {
-    name: "First letter uppercase, e.g. Lee Tian Le",
-    role: "E.g. installer, admin, etc.",
-    contact_number: "Format: 01XXXXXXXX (no dashes/spaces)",
-    team: "Select the team this employee belongs to",
-    email: "Press Tab to accept suggested email or type your own"
-};
-
-const TABLE_KEYS = ["name", "role", "contact_number", "email", "team", "active_flag"];
+const TABLE_KEYS = ["name", "role", "contact_number", "email", "team", "active_flag", "password"];
 
 const FIELD_LABELS = {
     name: "Name",
@@ -28,8 +20,19 @@ const FIELD_LABELS = {
     contact_number: "Contact Number",
     email: "Email",
     team: "Team",
-    active_flag: "Active Flag"
+    active_flag: "Active Flag",
+    password: "Password"
 };
+
+const FIELD_GUIDANCE = {
+    name: "First letter uppercase, e.g. Lee Tian Le",
+    role: "E.g. installer, admin, etc.",
+    contact_number: "Format: 01XXXXXXXX (no dashes/spaces)",
+    team: "Select the team this employee belongs to",
+    email: "Press Tab to accept suggested email or type your own",
+    password: "Enter a secure password"
+};
+
 
 const ROLE_OPTIONS = ["installer", "delivery team", "warehouse loader team", "admin"];
 
@@ -104,6 +107,9 @@ export default function EmployeeInfo() {
     const [successMsg, setSuccessMsg] = useState("");
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState("employees");
+    const [showPassword, setShowPassword] = useState(false);
+    const [visiblePasswords, setVisiblePasswords] = useState(new Set());
+
     
     // Email suggestion states
     const [suggestedEmail, setSuggestedEmail] = useState("");
@@ -197,7 +203,8 @@ export default function EmployeeInfo() {
             role: "",
             contact_number: "",
             team: "",
-            active_flag: true
+            active_flag: true,
+            password: ""
         });
         setModalOpen(true);
         setSuccessMsg("");
@@ -206,13 +213,15 @@ export default function EmployeeInfo() {
         setShowEmailSuggestion(false);
     }
 
+
     function openEditModal(idx) {
         setModalMode("edit");
         setEditIdx(idx);
         const employee = enrichedEmployees[idx];
         setModalData({
             ...employee,
-            team: employee.teamId || "" // Use teamId for the select dropdown
+            team: employee.teamId || "",
+            password: "" // empty unless admin wants to change
         });
         setModalOpen(true);
         setSuccessMsg("");
@@ -220,6 +229,7 @@ export default function EmployeeInfo() {
         setSuggestedEmail("");
         setShowEmailSuggestion(false);
     }
+
 
     function handleModalChange(e) {
         const { name, value } = e.target;
@@ -275,31 +285,29 @@ export default function EmployeeInfo() {
             };
 
             if (modalMode === "add") {
-                // Add new employee
+                employeeData.password = modalData.password; // add password
                 const newEmp = await addEmployee(employeeData);
 
-                // Assign team only if one is selected
                 if (modalData.team) {
-                    console.log("Assigning team:", modalData.team);
                     await assignOrUpdateEmployeeTeam(newEmp.EmployeeID, modalData.team);
                 }
 
                 setSuccessMsg("Employee added successfully!");
             } else {
-                // Update existing employee
+                // update existing employee
+                if (modalData.password) employeeData.password = modalData.password; // only update if entered
                 await updateEmployee(modalData.EmployeeID, employeeData);
 
-                // Update team only if it has changed (including null <-> value)
                 const oldTeam = modalData.teamId ?? null;
                 const newTeam = modalData.team ?? null;
 
                 if (oldTeam !== newTeam) {
-                    console.log("Team assignment changed:", oldTeam, "->", newTeam);
                     await assignOrUpdateEmployeeTeam(modalData.EmployeeID, newTeam);
                 }
 
                 setSuccessMsg("Employee updated successfully!");
             }
+
 
             await loadAllData(); // Refresh data
             setModalOpen(false);
@@ -330,58 +338,58 @@ export default function EmployeeInfo() {
         setSaving(false);
     }
 
-    // Approve pending user and add as employee
-    async function handleApprovePending(pendingUser) {
-        try {
-            setSaving(true);
-            setError(null);
+    // // Approve pending user and add as employee
+    // async function handleApprovePending(pendingUser) {
+    //     try {
+    //         setSaving(true);
+    //         setError(null);
             
-            // Add to employee database
-            const employeeData = {
-                name: pendingUser.displayName || pendingUser.name || "",
-                email: pendingUser.email,
-                role: "", // Will need to be set by admin
-                contact_number: "",
-                active_flag: true
-            };
+    //         // Add to employee database
+    //         const employeeData = {
+    //             name: pendingUser.displayName || pendingUser.name || "",
+    //             email: pendingUser.email,
+    //             role: "", // Will need to be set by admin
+    //             contact_number: "",
+    //             active_flag: true
+    //         };
             
-            await addEmployee(employeeData);
+    //         await addEmployee(employeeData);
             
-            // Update user status in Firebase users collection
-            const userRef = doc(db, 'users', pendingUser.uid);
-            await updateDoc(userRef, {
-                approved: true,
-                approvedAt: new Date(),
-                employeeStatus: 'active'
-            });
+    //         // Update user status in Firebase users collection
+    //         const userRef = doc(db, 'users', pendingUser.uid);
+    //         await updateDoc(userRef, {
+    //             approved: true,
+    //             approvedAt: new Date(),
+    //             employeeStatus: 'active'
+    //         });
             
-            setSuccessMsg(`${pendingUser.email} has been approved and added as an employee!`);
-            await loadAllData();
-        } catch (error) {
-            setError("Failed to approve user: " + error.message);
-        }
-        setSaving(false);
-    }
+    //         setSuccessMsg(`${pendingUser.email} has been approved and added as an employee!`);
+    //         await loadAllData();
+    //     } catch (error) {
+    //         setError("Failed to approve user: " + error.message);
+    //     }
+    //     setSaving(false);
+    // }
 
-    // Reject pending user
-    async function handleRejectPending(pendingUser) {
-        if (!window.confirm(`Reject ${pendingUser.email}? This will remove them from the system.`)) return;
+    // // Reject pending user
+    // async function handleRejectPending(pendingUser) {
+    //     if (!window.confirm(`Reject ${pendingUser.email}? This will remove them from the system.`)) return;
         
-        try {
-            setSaving(true);
-            setError(null);
+    //     try {
+    //         setSaving(true);
+    //         setError(null);
             
-            // Delete from Firebase users collection
-            const userRef = doc(db, 'users', pendingUser.uid);
-            await deleteDoc(userRef);
+    //         // Delete from Firebase users collection
+    //         const userRef = doc(db, 'users', pendingUser.uid);
+    //         await deleteDoc(userRef);
             
-            setSuccessMsg(`${pendingUser.email} has been rejected and removed.`);
-            await loadAllData();
-        } catch (error) {
-            setError("Failed to reject user: " + error.message);
-        }
-        setSaving(false);
-    }
+    //         setSuccessMsg(`${pendingUser.email} has been rejected and removed.`);
+    //         await loadAllData();
+    //     } catch (error) {
+    //         setError("Failed to reject user: " + error.message);
+    //     }
+    //     setSaving(false);
+    // }
 
     // Render form field
     function renderInputField(k, val, onChange, isEdit) {
@@ -493,6 +501,42 @@ export default function EmployeeInfo() {
             );
         }
 
+        if (k === "password") {
+            return (
+                <div className="relative">
+                    <input
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        value={val ?? ""}
+                        onChange={onChange}
+                        className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+                        placeholder="Enter password"
+                        required={modalMode === "add"} // required only when adding
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        tabIndex={-1}
+                    >
+                        {showPassword ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 4.5c-3.21 0-6 3-6 5.5s2.79 5.5 6 5.5 6-3 6-5.5-2.79-5.5-6-5.5zM10 14a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" />
+                                <path d="M10 7a3 3 0 100 6 3 3 0 000-6z" />
+                            </svg>
+                        ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M2.458 12C3.732 14.732 6.533 17 10 17c3.468 0 6.268-2.268 7.542-5-1.274-2.732-4.074-5-7.542-5-3.467 0-6.268 2.268-7.542 5zM10 13a3 3 0 100-6 3 3 0 000 6z" />
+                                <path d="M10 9a1 1 0 110 2 1 1 0 010-2z" />
+                            </svg>
+                        )}
+                    </button>
+                </div>
+            );
+        }
+
+
+
         return (
             <input
                 name={k}
@@ -507,7 +551,7 @@ export default function EmployeeInfo() {
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm">
             {/* Tab Navigation */}
-            <div className="flex border-b border-gray-200 mb-6">
+            {/* <div className="flex border-b border-gray-200 mb-6">
                 <button
                     onClick={() => setActiveTab("employees")}
                     className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -533,7 +577,7 @@ export default function EmployeeInfo() {
                         </span>
                     )}
                 </button>
-            </div>
+            </div> */}
 
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-800">
@@ -561,7 +605,7 @@ export default function EmployeeInfo() {
             )}
 
             <div className="overflow-x-auto">
-                {activeTab === "employees" ? (
+                {/* {activeTab === "employees" ? ( */}
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
@@ -606,6 +650,35 @@ export default function EmployeeInfo() {
                                                     <ActiveFlagBadge value={emp[k]} />
                                                 ) : k === "team" ? (
                                                     <TeamBadge teamType={emp[k]} />
+                                                ) : k === "password" ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono">
+                                                        {visiblePasswords.has(emp.EmployeeID) ? emp[k] : "••••••••"}
+                                                        </span>
+                                                        <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newSet = new Set(visiblePasswords);
+                                                            if (newSet.has(emp.EmployeeID)) newSet.delete(emp.EmployeeID);
+                                                            else newSet.add(emp.EmployeeID);
+                                                            setVisiblePasswords(newSet);
+                                                        }}
+                                                        className="text-gray-500 hover:text-gray-700"
+                                                        title={visiblePasswords.has(emp.EmployeeID) ? "Hide password" : "Show password"}
+                                                        >
+                                                        {visiblePasswords.has(emp.EmployeeID) ? (
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M10 4.5c-3.21 0-6 3-6 5.5s2.79 5.5 6 5.5 6-3 6-5.5-2.79-5.5-6-5.5zM10 14a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" />
+                                                            <path d="M10 7a3 3 0 100 6 3 3 0 000-6z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M10 4.5c-3.21 0-6 3-6 5.5s2.79 5.5 6 5.5 6-3 6-5.5-2.79-5.5-6-5.5zM10 14a4.5 4.5 0 110-9 4.5 4.5 0 010 9z" />
+                                                                <path d="M10 7a3 3 0 100 6 3 3 0 000-6z" />
+                                                            </svg>
+                                                        )}
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <span>{emp[k] ?? "—"}</span>
                                                 )}
@@ -640,7 +713,7 @@ export default function EmployeeInfo() {
                             )}
                         </tbody>
                     </table>
-                ) : (
+                {/* ) : (
                     // Pending Users Table
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -727,8 +800,7 @@ export default function EmployeeInfo() {
                                 ))
                             )}
                         </tbody>
-                    </table>
-                )}
+                    </table>*/}
             </div>
 
             {/* Add/Edit Employee Modal */}

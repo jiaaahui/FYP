@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  getAllEmployees, getAllOrders, getAllReports
+  getAllEmployees, getAllOrders, getAllCasess
 } from '../../../services/informationService';
-import { 
-  Users, Star, CheckCircle, AlertCircle, TrendingUp, TrendingDown, 
-  Activity, Clock, Package, Calendar, BarChart3, PieChart, DollarSign 
+import {
+  Users, Star, CheckCircle, AlertCircle, TrendingUp, TrendingDown,
+  Activity, Clock, Package, Calendar, BarChart3, PieChart, DollarSign,
+  ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -20,6 +21,8 @@ import {
   Filler
 } from 'chart.js';
 import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Register Chart.js components
 ChartJS.register(
@@ -37,7 +40,7 @@ ChartJS.register(
 
 // Stat card for main metrics
 const StatCard = ({ title, value, icon: Icon, color = 'blue', subtitle, trend, trendValue }) => (
-  <div 
+  <div
     className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all`}
   >
     <div className="flex items-center justify-between">
@@ -113,12 +116,20 @@ const ChartCard = ({ title, children, className = "" }) => (
 export default function Overview() {
   const [employees, setEmployees] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [reports, setReports] = useState([]);
+  const [Casess, setCasess] = useState([]);
+
+  // New: selected month state (focus month). Defaults to current month.
+  const [selectedMonthDate, setSelectedMonthDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  const containerRef = useRef(null);
 
   useEffect(() => {
     getAllEmployees().then(setEmployees);
     getAllOrders().then(setOrders);
-    getAllReports().then(setReports);
+    getAllCasess().then(setCasess);
   }, []);
 
   // Helpers for flexible field access
@@ -137,9 +148,9 @@ export default function Overview() {
     const date = getOrderDate(order);
     return formatDateDisplay(date);
   };
-  const getReportId = (report) => report.ReportID || report.id;
-  const getReportContent = (report) => report.Content ?? report.content ?? '';
-  const getReportStatus = (report) => report.Status ?? report.status ?? '';
+  const getCasesId = (Cases) => Cases.CasesID || Cases.id;
+  const getCasesContent = (Cases) => Cases.Content ?? Cases.content ?? '';
+  const getCasesStatus = (Cases) => Cases.Status ?? Cases.status ?? '';
 
   // Defensive date formatter
   function formatDateDisplay(dateInput) {
@@ -165,18 +176,28 @@ export default function Overview() {
     return String(dateInput);
   }
 
-  // Current metrics
+  // Helper to format selected month for header and file name
+  function formatMonthYear(date) {
+    if (!date) return '';
+    try {
+      return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    } catch {
+      return String(date);
+    }
+  }
+
+  // Current metrics (based on all data)
   const avgRating = orders.filter(o => getOrderRating(o)).length > 0
     ? (orders.reduce((sum, o) => sum + (getOrderRating(o) ? Number(getOrderRating(o)) : 0), 0) / orders.filter(o => getOrderRating(o)).length)
     : 0;
   const completedOrders = orders.filter(order => getOrderStatus(order) === 'Completed').length;
   const pendingOrders = orders.filter(order => getOrderStatus(order) === 'Pending').length;
   const activeEmployees = employees.filter(e => e.ActiveFlag !== false && e.active !== false).length;
-  const pendingReports = reports.filter(report => getReportStatus(report) === 'pending').length;
+  const pendingCasess = Casess.filter(Cases => getCasesStatus(Cases) === 'pending').length;
   const totalRevenue = completedOrders * 25;
 
-  // Calculate trends (compare current month with previous month)
-  const now = new Date();
+  // Calculate trends (compare selected month with previous month)
+  const now = selectedMonthDate;
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
@@ -206,10 +227,9 @@ export default function Overview() {
   const ordersTrend = lastMonthCompleted > 0 ? ((currentMonthCompleted - lastMonthCompleted) / lastMonthCompleted * 100) : (currentMonthCompleted > 0 ? 100 : 0);
   const ratingTrend = lastMonthAvgRating > 0 ? ((currentMonthAvgRating - lastMonthAvgRating) / lastMonthAvgRating * 100) : 0;
   const employeesTrend = 5; // Mock trend, you can calculate based on hire dates
-  const reportsTrend = -15; // Mock trend
+  const CasessTrend = -15; // Mock trend
 
-  // Prepare chart data
-  const monthlyOrdersData = [];
+  // Prepare chart data (12 months ending at selected month)
   const monthLabels = [];
   const totalOrdersData = [];
   const completedOrdersData = [];
@@ -221,10 +241,10 @@ export default function Overview() {
       const orderDate = getOrderDate(order);
       return orderDate.getMonth() === date.getMonth() && orderDate.getFullYear() === date.getFullYear();
     });
-    
+
     const completed = monthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
     const pending = monthOrders.filter(order => getOrderStatus(order) === 'Pending').length;
-    
+
     monthLabels.push(date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }));
     totalOrdersData.push(monthOrders.length);
     completedOrdersData.push(completed);
@@ -251,7 +271,7 @@ export default function Overview() {
 
   // Rating distribution
   const ratingLabels = ['1 Star', '2 Stars', '3 Stars', '4 Stars', '5 Stars'];
-  const ratingCounts = [1, 2, 3, 4, 5].map(rating => 
+  const ratingCounts = [1, 2, 3, 4, 5].map(rating =>
     orders.filter(order => Math.floor(Number(getOrderRating(order))) === rating).length
   );
 
@@ -377,7 +397,7 @@ export default function Overview() {
       },
       tooltip: {
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             const total = context.dataset.data.reduce((a, b) => a + b, 0);
             const percentage = ((context.parsed * 100) / total).toFixed(1);
             return `${context.label}: ${context.parsed} (${percentage}%)`;
@@ -396,169 +416,263 @@ export default function Overview() {
     })
     .slice(0, 5);
 
-  const recentReports = [...reports].reverse().slice(0, 5);
+  const recentCasess = [...Casess].reverse().slice(0, 5);
+
+  // Month navigation handlers
+  const prevMonth = () => {
+    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  };
+  const nextMonth = () => {
+    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  };
+
+  // Export to PDF handler
+  const exportToPdf = async () => {
+    if (!containerRef.current) return;
+    try {
+      // Use html2canvas to capture the container
+      const element = containerRef.current;
+      const originalBackground = element.style.backgroundColor;
+      // Ensure background is white for PDF
+      element.style.backgroundColor = '#ffffff';
+
+      // scale improves resolution
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+
+      // Create jsPDF and add image
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      // If content height exceeds a single page, split into pages
+      if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      } else {
+        // Add the image and create multiple pages if needed
+        let position = 0;
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        // Convert canvas to full-size image and draw page-by-page
+        // We'll slice the canvas vertically per pageHeight ratio
+        const totalPages = Math.ceil(pdfHeight / pageHeight);
+        for (let i = 0; i < totalPages; i++) {
+          const y = -(i * pageHeight * (imgProps.width / pdfWidth));
+          if (i > 0) pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, y, pdfWidth, pdfHeight);
+        }
+      }
+
+      const fileName = `dashboard-${formatMonthYear(selectedMonthDate).replace(/\s+/g, '_')}.pdf`;
+      pdf.save(fileName);
+
+      // restore background
+      element.style.backgroundColor = originalBackground;
+    } catch (err) {
+      console.error('Export to PDF failed', err);
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Completed Orders"
-          value={completedOrders}
-          icon={CheckCircle}
-          color="green"
-          subtitle={`${pendingOrders} pending`}
-          trend={`${ordersTrend >= 0 ? '+' : ''}${ordersTrend.toFixed(1)}%`}
-          trendValue={ordersTrend}
-        />
-        <StatCard
-          title="Average Rating"
-          value={avgRating > 0 ? avgRating.toFixed(1) : 'N/A'}
-          icon={Star}
-          color="yellow"
-          subtitle="Customer satisfaction"
-          trend={`${ratingTrend >= 0 ? '+' : ''}${ratingTrend.toFixed(1)}%`}
-          trendValue={ratingTrend}
-        />
-        <StatCard
-          title="Active Employees"
-          value={activeEmployees}
-          icon={Users}
-          color="blue"
-          subtitle={`${employees.length - activeEmployees} inactive`}
-          trend={`+${employeesTrend}%`}
-          trendValue={employeesTrend}
-        />
-        <StatCard
-          title="Pending Reports"
-          value={pendingReports}
-          icon={AlertCircle}
-          color="red"
-          subtitle="Requires attention"
-          trend={`${reportsTrend}%`}
-          trendValue={reportsTrend}
-        />
-      </div>
+    <div>
+      {/* Header with month navigation and export button */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={prevMonth}
+            className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+            title="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
 
-      {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">{orders.length}</p>
-              <p className="text-xs text-gray-500 mt-1">All time</p>
-            </div>
-            <Package className="h-8 w-8 text-purple-600" />
+          <div className="text-lg font-semibold">
+            {formatMonthYear(selectedMonthDate)}
           </div>
+
+          <button
+            onClick={nextMonth}
+            className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+            title="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Delivery Success Rate</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">
-                {orders.length > 0 ? Math.round((completedOrders / orders.length) * 100) : 0}%
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Successful deliveries rate</p>
-            </div>
-            <TrendingUp className="h-8 w-8 text-emerald-600" />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Est. Revenue</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">${totalRevenue.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-1">From completed orders</p>
-            </div>
-            <DollarSign className="h-8 w-8 text-green-600" />
-          </div>
+
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={exportToPdf}
+            className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-md shadow hover:bg-emerald-700"
+            title="Export dashboard as PDF"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export PDF
+          </button>
         </div>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Orders Trend */}
-        <ChartCard title="Monthly Orders Trend">
-          <Bar data={monthlyOrdersTrendData} options={barChartOptions} />
-        </ChartCard>
+      {/* Dashboard content wrapped in ref to capture for PDF */}
+      <div className="space-y-6" ref={containerRef}>
+        {/* Key Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard
+            title="Completed Orders"
+            value={completedOrders}
+            icon={CheckCircle}
+            color="green"
+            subtitle={`${pendingOrders} pending`}
+            trend={`${ordersTrend >= 0 ? '+' : ''}${ordersTrend.toFixed(1)}%`}
+            trendValue={ordersTrend}
+          />
+          <StatCard
+            title="Average Rating"
+            value={avgRating > 0 ? avgRating.toFixed(1) : 'N/A'}
+            icon={Star}
+            color="yellow"
+            subtitle="Customer satisfaction"
+            trend={`${ratingTrend >= 0 ? '+' : ''}${ratingTrend.toFixed(1)}%`}
+            trendValue={ratingTrend}
+          />
+          <StatCard
+            title="Active Employees"
+            value={activeEmployees}
+            icon={Users}
+            color="blue"
+            subtitle={`${employees.length - activeEmployees} inactive`}
+            trend={`+${employeesTrend}%`}
+            trendValue={employeesTrend}
+          />
+          <StatCard
+            title="Pending Casess"
+            value={pendingCasess}
+            icon={AlertCircle}
+            color="red"
+            subtitle="Requires attention"
+            trend={`${CasessTrend}%`}
+            trendValue={CasessTrend}
+          />
+        </div>
 
-        {/* Order Status Distribution */}
-        <ChartCard title="Order Status Distribution">
-          <Doughnut data={statusData} options={pieChartOptions} />
-        </ChartCard>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Trend */}
-        <ChartCard title="Revenue Trend">
-          <Line data={revenueData} options={lineChartOptions} />
-        </ChartCard>
-
-        {/* Customer Rating Distribution */}
-        <ChartCard title="Customer Rating Distribution">
-          <Bar data={ratingData} options={barChartOptions} />
-        </ChartCard>
-      </div>
-
-      {/* Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Completed Orders</h3>
-            <div className="flex items-center text-sm text-gray-500">
-              <Clock className="h-4 w-4 mr-1" />
-              Last 5 delivered
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            {recentCompletedOrders.length > 0 ? recentCompletedOrders.map((order) => (
-              <ActivityItem
-                key={getOrderId(order)}
-                icon={Package}
-                title={`Order ${getOrderId(order)}`}
-                description={getOrderFeedback(order) || 'No feedback provided'}
-                status={getOrderStatus(order)}
-                deliveredDate={getOrderDeliveredDate(order)}
-                priority="normal"
-              />
-            )) : (
-              <div className="text-center py-8 text-gray-500">
-                <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>No recent completed orders</p>
+        {/* Secondary Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Orders</p>
+                <p className="text-2xl font-bold text-purple-600 mt-1">{orders.length}</p>
+                <p className="text-xs text-gray-500 mt-1">All time</p>
               </div>
-            )}
+              <Package className="h-8 w-8 text-purple-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Delivery Success Rate</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">
+                  {orders.length > 0 ? Math.round((completedOrders / orders.length) * 100) : 0}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Successful deliveries rate</p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-emerald-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Est. Revenue</p>
+                <p className="text-2xl font-bold text-green-600 mt-1">${totalRevenue.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">From completed orders</p>
+              </div>
+              <DollarSign className="h-8 w-8 text-green-600" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">System Reports</h3>
-            <div className="flex items-center text-sm text-gray-500">
-              <AlertCircle className="h-4 w-4 mr-1" />
-              {pendingReports} pending
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Monthly Orders Trend */}
+          <ChartCard title="Monthly Orders Trend">
+            <Bar data={monthlyOrdersTrendData} options={barChartOptions} />
+          </ChartCard>
+
+          {/* Order Status Distribution */}
+          <ChartCard title="Order Status Distribution">
+            <Doughnut data={statusData} options={pieChartOptions} />
+          </ChartCard>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Revenue Trend */}
+          <ChartCard title="Revenue Trend">
+            <Line data={revenueData} options={lineChartOptions} />
+          </ChartCard>
+
+          {/* Customer Rating Distribution */}
+          <ChartCard title="Customer Rating Distribution">
+            <Bar data={ratingData} options={barChartOptions} />
+          </ChartCard>
+        </div>
+
+        {/* Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Recent Completed Orders</h3>
+              <div className="flex items-center text-sm text-gray-500">
+                <Clock className="h-4 w-4 mr-1" />
+                Last 5 delivered
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {recentCompletedOrders.length > 0 ? recentCompletedOrders.map((order) => (
+                <ActivityItem
+                  key={getOrderId(order)}
+                  icon={Package}
+                  title={`Order ${getOrderId(order)}`}
+                  description={getOrderFeedback(order) || 'No feedback provided'}
+                  status={getOrderStatus(order)}
+                  deliveredDate={getOrderDeliveredDate(order)}
+                  priority="normal"
+                />
+              )) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No recent completed orders</p>
+                </div>
+              )}
             </div>
           </div>
-          
-          <div className="space-y-2">
-            {recentReports.length > 0 ? recentReports.map((report) => (
-              <ActivityItem
-                key={getReportId(report)}
-                icon={AlertCircle}
-                title={`Report ${getReportId(report)}`}
-                description={getReportContent(report) || 'System report'}
-                status={getReportStatus(report)}
-                priority={getReportStatus(report) === 'pending' ? 'high' : 'normal'}
-              />
-            )) : (
-              <div className="text-center py-8 text-gray-500">
-                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>No recent reports</p>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">System Casess</h3>
+              <div className="flex items-center text-sm text-gray-500">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                {pendingCasess} pending
               </div>
-            )}
+            </div>
+
+            <div className="space-y-2">
+              {recentCasess.length > 0 ? recentCasess.map((Cases) => (
+                <ActivityItem
+                  key={getCasesId(Cases)}
+                  icon={AlertCircle}
+                  title={`Cases ${getCasesId(Cases)}`}
+                  description={getCasesContent(Cases) || 'System Cases'}
+                  status={getCasesStatus(Cases)}
+                  priority={getCasesStatus(Cases) === 'pending' ? 'high' : 'normal'}
+                />
+              )) : (
+                <div className="text-center py-8 text-gray-500">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No recent Casess</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

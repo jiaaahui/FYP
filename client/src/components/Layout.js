@@ -24,7 +24,7 @@ import ProductInfo from './admin/info/ProductInfo';
 import TruckInfo from './admin/info/TruckInfo';
 import TruckZoneInfo from './admin/info/TruckZoneInfo';
 import TeamInfo from './admin/info/TeamInfo';
-import Report from './admin/Report';
+import Cases from './admin/Cases';
 import Schedule from './admin/Schedule';
 import Performance from './admin/dashboard/Performance';
 import EmployeePerformance from './admin/dashboard/EmployeePerformance';
@@ -76,11 +76,11 @@ const Layout = () => {
       ]
     },
     users: {
-      title: 'Report',
+      title: 'Cases',
       icon: Users,
-      route: '/report',
+      route: '/cases',
       topNavItems: [
-        { id: 'report', label: 'Report', path: 'report', component: Report },
+        { id: 'Cases', label: 'Cases', path: 'Cases', component: Cases },
       ]
     },
     access: {
@@ -240,7 +240,7 @@ const Layout = () => {
           </div>
 
           {/* Pretty Navigation Tabs */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2">
+          <div className="max-w-7xl px-4 sm:px-6 lg:px-8 mt-2">
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
                 {currentSection.topNavItems.map((tab) => {
@@ -286,7 +286,7 @@ const Layout = () => {
               <Route path="/" element={<Overview />} />
               <Route path="/dashboard" element={<Overview />} />
               <Route path="/info" element={<EmployeeInfo />} />
-              <Route path="/report" element={<Report />} />
+              <Route path="/Cases" element={<Cases />} />
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/access" element={<RoleAccessControl />} />
               <Route path="/warehouse" element={<WarehouseLoadingSchedule />} />

@@ -133,11 +133,11 @@
     }
   }
 
-  // -- Report (random ID) --
-  export const getAllReports = () => getAllDocs("Report");
-  export const addReport = (data) => addDocGeneric("Report", data);
-  export const updateReport = (id, data) => updateDocGeneric("Report", id, data);
-  export const deleteReport = (id) => deleteDocGeneric("Report", id);
+  // -- Cases (random ID) --
+  export const getAllCasess = () => getAllDocs("Report");
+  export const addCases = (data) => addDocGeneric("Report", data);
+  export const updateCases = (id, data) => updateDocGeneric("Report", id, data);
+  export const deleteCases = (id) => deleteDocGeneric("Report", id);
 
   // -- Customer (custom ID: CustomerID) --
   export const getAllCustomers = () => getAllDocs("Customer");
