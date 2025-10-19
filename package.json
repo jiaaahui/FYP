@@ -2,7 +2,6 @@
   "name": "fyp",
   "version": "1.0.0",
   "main": "index.js",
-  "proxy": "http://localhost:3001",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "react-scripts start",
@@ -19,12 +18,11 @@
     "@fullcalendar/interaction": "^6.1.17",
     "@fullcalendar/react": "^6.1.17",
     "@fullcalendar/timegrid": "^6.1.17",
-    "bcryptjs": "^3.0.2",
     "chart.js": "^4.5.0",
     "chartjs": "^0.3.24",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
-    "dotenv": "^16.6.1",
+    "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "lucide-react": "^0.514.0",
@@ -39,10 +37,8 @@
     "recharts": "^2.15.4"
   },
   "devDependencies": {
-    "@prisma/client": "^6.17.1",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.5",
-    "prisma": "^6.17.1",
     "tailwindcss": "^4.1.10"
   }
 }
