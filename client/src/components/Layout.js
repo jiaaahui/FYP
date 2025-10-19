@@ -31,9 +31,9 @@ import EmployeePerformance from './admin/dashboard/EmployeePerformance';
 import OrderPerformance from './admin/dashboard/OrderPerformance';
 import RoleAccessControl from './admin/access/accessControl';
 import DeliverySchedule from './delivery/DelSchedule';
-import DummySchedulerPage from './delivery/Scheduler';
 import InstallationSchedule from './installer/InsSchedule';
 import WarehouseLoadingSchedule from './warehouse/truckSchedule';
+import AutoScheduleReview from './admin/schedule/AutoScheduleReview';
 
 const Layout = () => {
   const navigate = useNavigate();
@@ -60,6 +60,7 @@ const Layout = () => {
       route: '/schedule',
       topNavItems: [
         { id: 'schedule', label: 'Schedule', path: 'schedule', component: Schedule },
+        { id: 'auto-scheduler', label: 'Auto Scheduler', path: 'auto-scheduler', component: AutoScheduleReview }, 
       ]
     },
     products: {

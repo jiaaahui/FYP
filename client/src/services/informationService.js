@@ -133,6 +133,25 @@
     }
   }
 
+  export async function getOrderProductsByOrderId(orderId) {
+    const orderProductCol = collection(db, "OrderProduct");
+    const q = query(orderProductCol, where("OrderID", "==", orderId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+
+  export async function getProductById(productId) {
+      const snapshot = await getDocs(query(collection(db, "Product"), where("ProductID", "==", productId)));
+      if (snapshot.empty) return null;
+      return snapshot.docs[0].data();
+    }
+
+  export async function getBuildingById(buildingId) {
+    const snapshot = await getDocs(query(collection(db, "Building"), where("building_id", "==", buildingId)));
+    if (snapshot.empty) return null;
+    return snapshot.docs[0].data();
+  }
+
   // -- Cases (random ID) --
   export const getAllCasess = () => getAllDocs("Report");
   export const addCases = (data) => addDocGeneric("Report", data);
