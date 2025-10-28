@@ -188,6 +188,9 @@
   export const updateLorryTrip = (id, data) => updateDocGeneric("LorryTrip", id, data);
   export const deleteLorryTrip = (id) => deleteDocGeneric("LorryTrip", id);
 
+    // -- Roles
+  export const getRoles = () => getAllDocs("Roles");
+
   // ========== COMMON HELPERS ==========
 
   // Get employee objects for a team (by TeamID)

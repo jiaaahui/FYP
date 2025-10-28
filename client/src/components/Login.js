@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -9,6 +10,7 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { signIn } = useAuth();
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -17,55 +19,48 @@ function Login() {
       setError('');
       setLoading(true);
 
+      // 🔍 Step 1: Find employee by email
       const employeesRef = collection(db, 'Employee');
       const q = query(employeesRef, where('email', '==', email));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
         setError('No employee found with this email address');
-        setLoading(false);
         return;
       }
 
       const employeeDoc = querySnapshot.docs[0];
       const employeeData = employeeDoc.data();
 
-      if (!employeeData.active_flag) {
+      // 🚫 Step 2: Check active flag
+      if (employeeData.active_flag === false) {
         setError('This employee account has been deactivated');
-        setLoading(false);
         return;
       }
 
-      if (employeeData.password !== password) {
+      // 🔐 Step 3: Validate password (manual auth)
+      if ((employeeData.password || '') !== password) {
         setError('Invalid password');
-        setLoading(false);
         return;
       }
 
-      sessionStorage.setItem('employeeData', JSON.stringify(employeeData));
-      sessionStorage.setItem('employeeRole', employeeData.role);
-      sessionStorage.setItem('employeeId', employeeData.EmployeeID);
-      sessionStorage.setItem('employeeName', employeeData.name);
-      sessionStorage.setItem('employeeEmail', employeeData.email);
-      sessionStorage.setItem('isAuthenticated', 'true');
+      // ✅ Step 4: Store session in context
+      await signIn(employeeData);
 
-      const role = employeeData.role.toLowerCase().trim();
-      if (role === 'admin') navigate('/dashboard');
-      else if (role === 'installer') navigate('/installer-dashboard');
-      else if (role === 'delivery team') navigate('/delivery-dashboard');
-      else if (role === 'warehouse loader team') navigate('/warehouse-dashboard');
-      else navigate('/employee-dashboard');
+      // 🚀 Step 5: Redirect to Layout.js (main dashboard)
+      navigate('/', { replace: true });
 
     } catch (err) {
-      setError('Failed to sign in: ' + err.message);
+      console.error('Login Error:', err);
+      setError('Failed to sign in: ' + (err?.message || String(err)));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md border border-gray-200">
         <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
           Employee Login
         </h2>
@@ -78,25 +73,25 @@ function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-gray-700 mb-1">Email</label>
+            <label className="block text-gray-700 mb-1 font-medium">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your employee email"
             />
           </div>
 
           <div>
-            <label className="block text-gray-700 mb-1">Password</label>
+            <label className="block text-gray-700 mb-1 font-medium">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your password"
             />
           </div>
@@ -104,7 +99,7 @@ function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 font-semibold"
           >
             {loading ? 'Logging in...' : 'Log In'}
           </button>

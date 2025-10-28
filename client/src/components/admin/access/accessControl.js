@@ -1,356 +1,205 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Shield, 
-  Users, 
-  Settings, 
-  Check, 
-  X, 
-  Save, 
-  RotateCcw, 
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  Plus,
-  Trash2,
-  Edit3
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { db } from '../../../firebase';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { Shield, Users, Save, X } from 'lucide-react';
 
-// Mock data - replace with your actual Firebase calls
-const mockRoles = [
-  { id: 'admin', name: 'Admin', description: 'Full system access', userCount: 3 },
-  { id: 'delivery-team', name: 'Delivery Team', description: 'Delivery and schedule management', userCount: 8 },
-  { id: 'manager', name: 'Manager', description: 'Management oversight', userCount: 2 },
-  { id: 'warehouse staff', name: 'Warehouse Staff', description: 'Basic access', userCount: 15 }
+/**
+ * AccessControl
+ * - Loads Roles collection from Firestore
+ * - Shows a list of roles and their permissions
+ * - Allows editing a role's permissions and saving back to Firestore
+ *
+ * The UI matches the simpler design you provided in the second snippet.
+ */
+
+const ALL_PERMISSIONS = [
+  'dashboard',
+  'documents',
+  'products',
+  'users',
+  'access',
+  'delivery',
+  'installation',
+  'warehouse',
 ];
 
-const mockNavItems = [
-  { key: 'dashboard', name: 'Dashboard', description: 'Main dashboard overview', icon: '📊' },
-  { key: 'documents', name: 'Schedule', description: 'Schedule management and delivery planning', icon: '📅' },
-  { key: 'products', name: 'Information', description: 'Product and inventory information', icon: '📦' },
-  { key: 'users', name: 'Reports', description: 'Analytics and reporting tools', icon: '📈' },
-  { key: 'employees', name: 'Employee Management', description: 'Employee data and performance', icon: '👥' },
-  { key: 'settings', name: 'System Settings', description: 'System configuration', icon: '⚙️' }
-];
-
-// Initial access control data
-const initialAccessControl = {
-  'admin': ['dashboard', 'documents', 'products', 'users', 'employees', 'settings'],
-  'delivery-team': ['documents'],
-  'manager': ['dashboard', 'documents', 'users', 'employees'],
-  'warehousestaff': ['dashboard']
-};
-
-export default function RoleAccessControl() {
-  const [accessControl, setAccessControl] = useState(initialAccessControl);
-  const [originalAccessControl, setOriginalAccessControl] = useState(initialAccessControl);
-  const [selectedRole, setSelectedRole] = useState('admin');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [newRoleName, setNewRoleName] = useState('');
-  const [showAddRole, setShowAddRole] = useState(false);
+export default function AccessControl() {
+  const [roles, setRoles] = useState([]); // [{ id, name, permissions }]
+  const [loading, setLoading] = useState(true);
+  const [editingRole, setEditingRole] = useState(null); // role object
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const hasChangesCheck = JSON.stringify(accessControl) !== JSON.stringify(originalAccessControl);
-    setHasChanges(hasChangesCheck);
-  }, [accessControl, originalAccessControl]);
+    let mounted = true;
 
-  const toggleAccess = (roleId, navKey) => {
-    setAccessControl(prev => ({
-      ...prev,
-      [roleId]: prev[roleId]?.includes(navKey) 
-        ? prev[roleId].filter(key => key !== navKey)
-        : [...(prev[roleId] || []), navKey]
-    }));
+    const fetchRoles = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const snap = await getDocs(collection(db, 'Roles'));
+        const data = snap.docs.map(d => {
+          const raw = d.data() || {};
+          return {
+            id: d.id,
+            name: raw.name || d.id,
+            permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
+            // keep any extra fields if needed in future
+            ...raw,
+          };
+        });
+        if (!mounted) return;
+        setRoles(data);
+      } catch (err) {
+        console.error('Failed to fetch Roles:', err);
+        if (mounted) setError('Failed to load roles.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchRoles();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleEdit = (role) => {
+    setEditingRole(role);
+    setSelectedPermissions(Array.isArray(role.permissions) ? [...role.permissions] : []);
+    setError(null);
   };
 
-  const saveChanges = () => {
-    // Here you would save to Firebase
-    setOriginalAccessControl({ ...accessControl });
-    setHasChanges(false);
-    alert('Access control settings saved successfully!');
+  const handleCancelEdit = () => {
+    setEditingRole(null);
+    setSelectedPermissions([]);
+    setError(null);
   };
 
-  const resetChanges = () => {
-    setAccessControl({ ...originalAccessControl });
-    setHasChanges(false);
+  const handleCheckboxChange = (perm) => {
+    setSelectedPermissions(prev => (prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]));
   };
 
-  const addNewRole = () => {
-    if (newRoleName.trim()) {
-      const roleId = newRoleName.toLowerCase().replace(/\s+/g, '-');
-      setAccessControl(prev => ({
-        ...prev,
-        [roleId]: []
-      }));
-      setNewRoleName('');
-      setShowAddRole(false);
-      setSelectedRole(roleId);
+  const handleSave = async () => {
+    if (!editingRole) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const roleRef = doc(db, 'Roles', editingRole.id);
+      await updateDoc(roleRef, {
+        permissions: selectedPermissions,
+      });
+
+      // update local state
+      setRoles(prev => prev.map(r => (r.id === editingRole.id ? { ...r, permissions: selectedPermissions } : r)));
+      setEditingRole(null);
+      setSelectedPermissions([]);
+    } catch (err) {
+      console.error('Failed to save role permissions:', err);
+      setError('Failed to save changes. See console for details.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deleteRole = (roleId) => {
-    if (roleId === 'admin') {
-      alert('Cannot delete admin role');
-      return;
-    }
-    setAccessControl(prev => {
-      const newState = { ...prev };
-      delete newState[roleId];
-      return newState;
-    });
-    if (selectedRole === roleId) {
-      setSelectedRole('admin');
-    }
-  };
-
-  const getRoleInfo = (roleId) => {
-    return mockRoles.find(role => role.id === roleId) || 
-           { id: roleId, name: roleId, description: 'Custom role', userCount: 0 };
-  };
-
-  const getAccessCount = (roleId) => {
-    return accessControl[roleId]?.length || 0;
-  };
-
-  const selectedRoleInfo = getRoleInfo(selectedRole);
+  if (loading) {
+    return <div className="p-6 text-gray-600">Loading roles...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Shield className="h-8 w-8 text-blue-600 mr-3" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Role-Based Access Control</h1>
-                <p className="text-gray-600">Manage what each role can access in the system</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-                {showPreview ? 'Hide Preview' : 'Preview Access'}
-              </button>
-              {hasChanges && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={resetChanges}
-                    className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset
-                  </button>
-                  <button
-                    onClick={saveChanges}
-                    className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
-                  </button>
-                </div>
-              )}
-            </div>
+    <div className="p-6 bg-white shadow rounded-lg">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-3">
+          <Shield className="h-6 w-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-gray-800">Access Control</h2>
+        </div>
+        <div className="text-sm text-gray-500">Manage role permissions</div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">{error}</div>
+      )}
+
+      {editingRole ? (
+        <div>
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold">Editing Role: <span className="text-blue-600">{editingRole.name}</span></h3>
+            <p className="text-sm text-gray-500">Toggle permissions then click Save.</p>
           </div>
 
-          {hasChanges && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center">
-                <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
-                <p className="text-yellow-800 text-sm">
-                  You have unsaved changes. Don't forget to save your access control modifications.
-                </p>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            {ALL_PERMISSIONS.map(perm => (
+              <label key={perm} className="flex items-center space-x-3 p-2 border rounded">
+                <input
+                  type="checkbox"
+                  checked={selectedPermissions.includes(perm)}
+                  onChange={() => handleCheckboxChange(perm)}
+                />
+                <span className="capitalize text-sm">{perm.replace('-', ' ')}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-60 flex items-center space-x-2"
+            >
+              <Save className="h-4 w-4" />
+              <span>{saving ? 'Saving...' : 'Save'}</span>
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 flex items-center space-x-2"
+            >
+              <X className="h-4 w-4" />
+              <span>Cancel</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="min-w-full table-auto border">
+            <thead>
+              <tr className="bg-gray-100 text-left">
+                <th className="py-2 px-4 border-b">Role Name</th>
+                <th className="py-2 px-4 border-b">Permissions</th>
+                <th className="py-2 px-4 border-b">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map(role => (
+                <tr key={role.id} className="hover:bg-gray-50">
+                  <td className="py-2 px-4 border-b align-top">
+                    <div className="font-medium">{role.name}</div>
+                    <div className="text-xs text-gray-500 mt-1 break-words">{role.id}</div>
+                  </td>
+                  <td className="py-2 px-4 border-b align-top">
+                    <div className="text-sm text-gray-700">
+                      {Array.isArray(role.permissions) && role.permissions.length > 0
+                        ? role.permissions.join(', ')
+                        : <span className="text-gray-400">No permissions</span>
+                      }
+                    </div>
+                  </td>
+                  <td className="py-2 px-4 border-b align-top">
+                    <button
+                      onClick={() => handleEdit(role)}
+                      className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {roles.length === 0 && (
+            <div className="mt-4 text-gray-600">No roles found in the Roles collection.</div>
           )}
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Role Selection Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Roles</h3>
-                <button
-                  onClick={() => setShowAddRole(true)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Add New Role"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-
-              {showAddRole && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                  <input
-                    type="text"
-                    placeholder="New role name"
-                    value={newRoleName}
-                    onChange={(e) => setNewRoleName(e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded mb-2 text-sm"
-                    onKeyPress={(e) => e.key === 'Enter' && addNewRole()}
-                  />
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={addNewRole}
-                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                    >
-                      Add
-                    </button>
-                    <button
-                      onClick={() => { setShowAddRole(false); setNewRoleName(''); }}
-                      className="px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                {Object.keys(accessControl).map(roleId => {
-                  const roleInfo = getRoleInfo(roleId);
-                  const accessCount = getAccessCount(roleId);
-                  const isSelected = selectedRole === roleId;
-                  
-                  return (
-                    <div
-                      key={roleId}
-                      onClick={() => setSelectedRole(roleId)}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors relative group ${
-                        isSelected 
-                          ? 'bg-blue-50 border-2 border-blue-200' 
-                          : 'border border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-gray-900 text-sm">{roleInfo.name}</h4>
-                            {roleId !== 'admin' && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteRole(roleId);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-all"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1">{roleInfo.userCount} users</p>
-                          <p className="text-xs text-blue-600 mt-1">{accessCount} permissions</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Main Access Control Panel */}
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Access Permissions: {selectedRoleInfo.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 mt-1">{selectedRoleInfo.description}</p>
-                </div>
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
-                  <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-1" />
-                    {selectedRoleInfo.userCount} users
-                  </div>
-                  <div className="flex items-center">
-                    <Shield className="h-4 w-4 mr-1" />
-                    {getAccessCount(selectedRole)} permissions
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {mockNavItems.map(navItem => {
-                  const hasAccess = accessControl[selectedRole]?.includes(navItem.key);
-                  
-                  return (
-                    <div
-                      key={navItem.key}
-                      className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                        hasAccess
-                          ? 'border-green-200 bg-green-50'
-                          : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                      }`}
-                      onClick={() => toggleAccess(selectedRole, navItem.key)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center flex-1">
-                          <span className="text-2xl mr-3">{navItem.icon}</span>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{navItem.name}</h4>
-                            <p className="text-sm text-gray-600 mt-1">{navItem.description}</p>
-                          </div>
-                        </div>
-                        <div className={`p-2 rounded-full ${
-                          hasAccess 
-                            ? 'bg-green-100 text-green-600' 
-                            : 'bg-gray-200 text-gray-400'
-                        }`}>
-                          {hasAccess ? <Check className="h-5 w-5" /> : <X className="h-5 w-5" />}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Access Preview Panel */}
-            {showPreview && (
-              <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Navigation Preview for {selectedRoleInfo.name}
-                </h3>
-                <div className="bg-gray-900 rounded-lg p-4">
-                  <div className="flex flex-col space-y-2">
-                    {mockNavItems.map(navItem => {
-                      const hasAccess = accessControl[selectedRole]?.includes(navItem.key);
-                      
-                      return (
-                        <div
-                          key={navItem.key}
-                          className={`flex items-center p-3 rounded ${
-                            hasAccess 
-                              ? 'text-white bg-gray-800 hover:bg-gray-700' 
-                              : 'text-gray-500 opacity-50 cursor-not-allowed'
-                          }`}
-                        >
-                          <span className="mr-3">{navItem.icon}</span>
-                          <span className="font-medium">{navItem.name}</span>
-                          {!hasAccess && (
-                            <X className="h-4 w-4 ml-auto text-red-500" />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mt-3">
-                  This shows how the navigation would appear for users with the "{selectedRoleInfo.name}" role.
-                  Grayed out items would be hidden or inaccessible.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

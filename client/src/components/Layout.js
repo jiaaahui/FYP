@@ -1,22 +1,19 @@
-import React, { useState } from 'react';
-import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';// Update this path to match your file structure
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
-  Home,
-  Users,
-  Settings,
-  BarChart3,
-  FileText,
-  ShoppingCart,
-  Menu,
-  X,
-  ChevronRight,
-  Bell,
-  Search,
-  User,
-  Calendar,
-  LogOut
+  Home, Users, FileText, Menu, X, ChevronRight, User, Calendar, LogOut
 } from 'lucide-react';
+import {
+  collection,
+  query,
+  where,
+  getDocs
+} from 'firebase/firestore';
+import { db } from '../firebase';
+
+
+// Admin pages
 import Overview from './admin/dashboard/Overview';
 import EmployeeInfo from './admin/info/EmployeeInfo';
 import BuildingInfo from './admin/info/BuildingInfo';
@@ -26,22 +23,54 @@ import TruckZoneInfo from './admin/info/TruckZoneInfo';
 import TeamInfo from './admin/info/TeamInfo';
 import Cases from './admin/Cases';
 import Schedule from './admin/Schedule';
-import Performance from './admin/dashboard/Performance';
 import EmployeePerformance from './admin/dashboard/EmployeePerformance';
 import OrderPerformance from './admin/dashboard/OrderPerformance';
 import RoleAccessControl from './admin/access/accessControl';
+import AutoScheduleReview from './admin/schedule/AutoScheduleReview';
+
+
+// Other roles
 import DeliverySchedule from './delivery/DelSchedule';
 import InstallationSchedule from './installer/InsSchedule';
 import WarehouseLoadingSchedule from './warehouse/truckSchedule';
-import AutoScheduleReview from './admin/schedule/AutoScheduleReview';
+import { signOut } from 'firebase/auth';
+
+
+// ===============================
+// Helper: Fetch permissions for role
+// ===============================
+async function fetchRolePermissions(roleName) {
+  if (!roleName) return [];
+  try {
+    const rolesRef = collection(db, 'Roles');
+    // try to match name (some documents use generated id, some use name field)
+    const q = query(rolesRef, where('name', '==', roleName.trim().toLowerCase()));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return [];
+    const data = snapshot.docs[0].data();
+    return data.permissions || [];
+  } catch (err) {
+    console.error('Error fetching role permissions:', err);
+    return [];
+  }
+}
+
 
 const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout } = useAuth(); // Get currentUser and logout from AuthContext
-  const [activeSection, setActiveSection] = useState('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const { currentUser, logout } = useAuth();
 
+  const [activeSection, setActiveSection] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [permissions, setPermissions] = useState([]);
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
+
+  const [topNavActive, setTopNavActive] = useState('');
+
+  // ===============================
+  // Navigation structure
+  // ===============================
   const navigationData = {
     dashboard: {
       title: 'Dashboard',
@@ -51,19 +80,18 @@ const Layout = () => {
         { id: 'overview', label: 'Overview', path: 'overview', component: Overview },
         { id: 'employee-performance', label: 'Employee Performance', path: 'employee-performance', component: EmployeePerformance },
         { id: 'orders', label: 'Orders', path: 'order', component: OrderPerformance },
-        // { id: 'overall', label: 'Overall', path: 'overall', component: Performance },
-      ]
+      ],
     },
-    documents: {
+    schedule: {
       title: 'Schedule',
       icon: Calendar,
       route: '/schedule',
       topNavItems: [
         { id: 'schedule', label: 'Schedule', path: 'schedule', component: Schedule },
-        { id: 'auto-scheduler', label: 'Auto Scheduler', path: 'auto-scheduler', component: AutoScheduleReview }, 
-      ]
+        { id: 'auto-scheduler', label: 'Auto Scheduler', path: 'auto-scheduler', component: AutoScheduleReview },
+      ],
     },
-    products: {
+    info: {
       title: 'Information',
       icon: FileText,
       route: '/info',
@@ -74,15 +102,15 @@ const Layout = () => {
         { id: 'product', label: 'Product', path: 'product', component: ProductInfo },
         { id: 'truck', label: 'Truck', path: 'truck', component: TruckInfo },
         { id: 'truckzone', label: 'TruckZone', path: 'truckzone', component: TruckZoneInfo },
-      ]
+      ],
     },
-    users: {
+    cases: {
       title: 'Cases',
       icon: Users,
       route: '/cases',
       topNavItems: [
-        { id: 'Cases', label: 'Cases', path: 'Cases', component: Cases },
-      ]
+        { id: 'cases', label: 'Cases', path: 'cases', component: Cases },
+      ],
     },
     access: {
       title: 'Access Control',
@@ -90,7 +118,7 @@ const Layout = () => {
       route: '/access',
       topNavItems: [
         { id: 'access', label: 'Access Control', path: 'access', component: RoleAccessControl },
-      ]
+      ],
     },
     delivery: {
       title: 'Delivery Schedule',
@@ -98,8 +126,7 @@ const Layout = () => {
       route: '/delivery',
       topNavItems: [
         { id: 'delivery', label: 'Delivery Schedule', path: 'delivery', component: DeliverySchedule },
-        // { id: 'scheduler', label: 'Auto Scheduler', path: 'scheduler', component: DummySchedulerPage },
-      ]
+      ],
     },
     installation: {
       title: 'Installation Schedule',
@@ -107,7 +134,7 @@ const Layout = () => {
       route: '/installation',
       topNavItems: [
         { id: 'installation', label: 'Installation Schedule', path: 'installation', component: InstallationSchedule },
-      ]
+      ],
     },
     warehouse: {
       title: 'Warehouse Schedule',
@@ -115,86 +142,148 @@ const Layout = () => {
       route: '/warehouse',
       topNavItems: [
         { id: 'warehouse', label: 'Warehouse Schedule', path: 'warehouse', component: WarehouseLoadingSchedule },
-      ]
+      ],
     },
-    // settings: {
-    //   title: 'Settings',
-    //   icon: Settings,
-    //   route: '/settings',
-    //   topNavItems: [
-    //     { id: 'general', label: 'General', path: 'general' },
-    //     { id: 'security', label: 'Security', path: 'security' },
-    //     { id: 'notifications', label: 'Notifications', path: 'notifications' },
-    //     { id: 'integrations', label: 'Integrations', path: 'integrations' }
-    //   ]
-    // },
   };
 
-  const [topNavActive, setTopNavActive] = useState('overview');
 
-  // Handle logout function
+  // ===============================
+  // Load permissions for current user
+  // ===============================
+  useEffect(() => {
+    const loadPermissions = async () => {
+      if (!currentUser) {
+        setPermissions([]);
+        setLoadingPermissions(false);
+        return;
+      }
+      try {
+        setLoadingPermissions(true);
+        // Fetch employee record by email
+        const empRef = collection(db, 'Employee');
+        const q = query(empRef, where('email', '==', currentUser.email));
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          console.warn('No matching employee record found');
+          setPermissions([]);
+          return;
+        }
+
+        const empData = snap.docs[0].data();
+        const roleName = (empData.role || '').trim().toLowerCase();
+
+          const rolePermissions = await fetchRolePermissions(roleName);
+          // normalize keys: if your Roles.permissions contain human labels, map them to navigation keys here as needed.
+          setPermissions(rolePermissions.map(p => p));
+      } catch (err) {
+        console.error('Failed to load permissions:', err);
+        setPermissions([]);
+      } finally {
+        setLoadingPermissions(false);
+      }
+    };
+    loadPermissions();
+  }, [currentUser]);
+
+
+  // ===============================
+  // Filter visible navigation
+  // ===============================
+  const filteredNavigation = useMemo(() => {
+    // guard
+    if (!Array.isArray(permissions) || permissions.length === 0) return [];
+    // keep only navigation entries whose key is present in permissions
+    return Object.entries(navigationData).filter(([key]) =>
+      permissions.includes(key)
+    );
+  }, [permissions]);
+
+
+  // ===============================
+  // Navigation actions
+  // ===============================
+  const handleSideNavClick = (sectionKey) => {
+    setActiveSection(sectionKey);
+    const section = navigationData[sectionKey];
+    if (section?.route) {
+      // navigate to section base; Layout now provides a redirect route that will forward to the first top tab
+      navigate(section.route);
+    }
+  };
+
+
   const handleLogout = async () => {
     try {
       await logout();
-      navigate('/login'); // Redirect to login page after logout
+      navigate('/login');
     } catch (error) {
       console.error('Error during logout:', error);
     }
   };
 
-  const handleSideNavClick = (sectionKey) => {
-    setActiveSection(sectionKey);
-    const section = navigationData[sectionKey];
-    if (section.route) {
-      navigate(section.route);
-    }
-    const firstItem = section.topNavItems[0];
-    setTopNavActive(firstItem.id);
-  };
 
-  const currentSection = navigationData[activeSection];
+  useEffect(() => {
+    // auto-select first accessible tab after loading
+    if (!loadingPermissions && filteredNavigation.length > 0 && !activeSection) {
+      const [firstKey, firstSection] = filteredNavigation[0];
+      setActiveSection(firstKey);
+      navigate(firstSection.route);
+    }
+  }, [loadingPermissions, filteredNavigation, navigate, activeSection]);
+
+
+  // ===============================
+  // Loading screen
+  // ===============================
+  if (loadingPermissions) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-gray-600">Loading permissions...</div>
+      </div>
+    );
+  }
+
+
+  // ===============================
+  // Layout rendering
+  // ===============================
+  const currentSection = navigationData[activeSection] || {};
+
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gray-50">
-      {/* Fixed Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-16'} bg-white shadow-lg transition-all duration-300 ease-in-out border-r border-gray-200 flex flex-col flex-shrink-0`}>
-        {/* Sidebar Header - Fixed */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+      {/* Sidebar */}
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-16'} bg-white shadow-lg transition-all duration-300 ease-in-out border-r border-gray-200 flex flex-col`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
           {isSidebarOpen && (
-            <div className="flex items-center space-x-2 min-w-0">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">T</span>
               </div>
               <span className="text-xl font-bold text-gray-800 truncate">TBMDelivery</span>
             </div>
           )}
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
-          >
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg hover:bg-gray-100">
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        {/* Navigation Items - Scrollable if needed */}
         <nav className="flex-1 overflow-y-auto px-3 py-6">
           <div className="space-y-2">
-            {Object.entries(navigationData).map(([key, item]) => {
-              const IconComponent = item.icon;
+            {filteredNavigation.map(([key, item]) => {
+              const Icon = item.icon;
               const isActive = activeSection === key;
               return (
                 <button
                   key={key}
                   onClick={() => handleSideNavClick(key)}
                   className={`w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group ${isActive
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
                     }`}
                 >
-                  <IconComponent
-                    size={20}
-                    className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-600'}`}
-                  />
+                  <Icon size={20} className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-600'}`} />
                   {isSidebarOpen && (
                     <>
                       <span className="ml-3 font-medium truncate">{item.title}</span>
@@ -212,41 +301,33 @@ const Layout = () => {
         </nav>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Fixed Top Navigation */}
-        <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-          {/* Header with Title and User Actions */}
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h1 className="text-xl font-bold text-gray-800 truncate min-w-0">{currentSection.title}</h1>
-            <div className="flex items-center space-x-4 flex-shrink-0">
-              {/* User Profile Button with current user info */}
+            <h1 className="text-xl font-bold text-gray-800 truncate">{currentSection.title}</h1>
+            <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 p-2 text-gray-700 rounded-lg">
-                <User size={20} className="flex-shrink-0" />
-                <span className="hidden md:block font-medium">
-                  {currentUser?.displayName || currentUser?.email || 'User'}
-                </span>
+                <User size={20} />
+                <span className="hidden md:block font-medium">{currentUser?.displayName || currentUser?.email || 'User'}</span>
               </div>
-              
-              {/* Logout Button in Header (Alternative placement) */}
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 p-2 text-gray-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                title="Logout"
               >
-                <LogOut size={20} className="flex-shrink-0" />
+                <LogOut size={20} />
                 <span className="hidden lg:block font-medium">Logout</span>
               </button>
             </div>
           </div>
 
-          {/* Pretty Navigation Tabs */}
-          <div className="max-w-7xl px-4 sm:px-6 lg:px-8 mt-2">
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
-                {currentSection.topNavItems.map((tab) => {
-                  const Icon = tab.icon;
-                  return (
+          {/* Top Tabs */}
+          {currentSection?.topNavItems && (
+            <div className="max-w-7xl px-4 sm:px-6 lg:px-8 mt-2">
+              <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8">
+                  {currentSection.topNavItems.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => {
@@ -254,51 +335,62 @@ const Layout = () => {
                         navigate(`${currentSection.route}/${tab.path}`);
                       }}
                       className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${topNavActive === tab.id
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                     >
-                      {Icon && <Icon className="h-4 w-4 mr-2" />}
                       {tab.label}
                     </button>
-                  );
-                })}
-              </nav>
+                  ))}
+                </nav>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-2">
-            <Routes>
-              {Object.entries(navigationData).flatMap(([sectionKey, section]) =>
-                section.topNavItems.map((item) =>
-                  item.component ? (
-                    <Route
-                      key={`${section.route}/${item.path}`}
-                      path={`${section.route}/${item.path}`}
-                      element={<item.component />}
-                    />
-                  ) : null
-                )
-              )}
-              {/* Default fallback routes */}
-              <Route path="/" element={<Overview />} />
-              <Route path="/dashboard" element={<Overview />} />
-              <Route path="/info" element={<EmployeeInfo />} />
-              <Route path="/cases" element={<Cases />} />
-              <Route path="/schedule" element={<Schedule />} />
-              <Route path="/access" element={<RoleAccessControl />} />
-              <Route path="/delivery" element={<DeliverySchedule />} />
-              <Route path="/installation" element={<InstallationSchedule />} />
-              <Route path="/warehouse" element={<WarehouseLoadingSchedule />} />
-            </Routes>
-          </div>
+        {/* Main body routes */}
+        <div className="flex-1 overflow-auto p-2">
+          <Routes>
+            {/*
+              Add a redirect Route for each section base path -> first topNavItems child.
+              This prevents "No routes matched location '/dashboard'" when navigating to the base path.
+            */}
+            {Object.entries(navigationData).map(([sectionKey, section]) => {
+              const firstTop = section.topNavItems && section.topNavItems[0];
+              const target = firstTop ? `${section.route}/${firstTop.path}` : section.route;
+              return (
+                <Route
+                  key={`redirect-${section.route}`}
+                  path={section.route}
+                  element={<Navigate to={target} replace />}
+                />
+              );
+            })}
+
+            {Object.entries(navigationData).flatMap(([sectionKey, section]) =>
+              section.topNavItems.map((item) =>
+                item.component ? (
+                  <Route
+                    key={`${section.route}/${item.path}`}
+                    path={`${section.route}/${item.path}`}
+                    element={<item.component />}
+                  />
+                ) : null
+              )
+            )}
+            {/* Optionally add a root redirect to first allowed section */}
+            {filteredNavigation.length > 0 && (
+              <Route
+                path="/"
+                element={<Navigate to={filteredNavigation[0][1].route + '/' + (filteredNavigation[0][1].topNavItems?.[0]?.path || '')} replace />}
+              />
+            )}
+          </Routes>
         </div>
       </div>
     </div>
   );
 };
+
 
 export default Layout;

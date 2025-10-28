@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './components/admin/dashboard/Overview';
+import Layout from './components/Layout';
 // import InstallerDashboard from './components/InstallerDashboard';
 // import DeliveryDashboard from './components/DeliveryDashboard';
 // import WarehouseDashboard from './components/WarehouseDashboard';
@@ -13,15 +14,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Login />} />
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <Dashboard />
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="*" element={<Layout />} />
           
           {/* <Route 
             path="/installer-dashboard" 
