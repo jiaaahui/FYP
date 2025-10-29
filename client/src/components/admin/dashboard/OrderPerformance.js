@@ -2,65 +2,163 @@ import React, { useEffect, useState } from 'react';
 import {
   getAllOrders, getAllCustomers, getAllBuildings
 } from '../../../services/informationService';
-import { Package, CheckCircle, Star, Clock } from 'lucide-react';
+import { Package, CheckCircle, Star, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function OrderPerformance() {
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [buildings, setBuildings] = useState([]);
 
+  // selected month state (focus month). Defaults to current month.
+  const [selectedMonthDate, setSelectedMonthDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
   useEffect(() => {
-    getAllOrders().then(setOrders);
-    getAllCustomers().then(setCustomers);
-    getAllBuildings().then(setBuildings);
+    getAllOrders().then(setOrders).catch(err => console.warn(err));
+    getAllCustomers().then(setCustomers).catch(err => console.warn(err));
+    getAllBuildings().then(setBuildings).catch(err => console.warn(err));
   }, []);
 
   const getCustomerName = (customerId) => {
-    const customer = customers.find(c => c.CustomerID === customerId);
-    return customer?.FullName || customerId;
+    const customer = customers.find(c => c.CustomerID === customerId || c.id === customerId);
+    return customer?.FullName || customer?.name || customerId;
   };
   const getBuildingName = (buildingId) => {
-    const building = buildings.find(b => b.building_id === buildingId || b.BuildingID === buildingId);
-    return building?.BuildingName || buildingId;
+    const building = buildings.find(b => b.building_id === buildingId || b.BuildingID === buildingId || b.id === buildingId);
+    return building?.BuildingName || building?.name || buildingId;
   };
 
-  const completedOrders = orders.filter(order => order.OrderStatus === 'Completed').length;
-  const avgAttempts = orders.length > 0 ? (orders.reduce((sum, o) => sum + (o.NumberOfAttempts || 1), 0) / orders.length) : 0;
-  const successRate = orders.length > 0 ? Math.round((completedOrders / orders.length) * 100) + '%' : '0%';
+  // Robust getOrderDate: returns Date object or null if no valid date found.
+  const getOrderDate = (order) => {
+    if (!order) return null;
+    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    for (const f of tryFields) {
+      const v = order[f];
+      if (!v) continue;
+      // Firestore Timestamp
+      if (typeof v?.toDate === 'function') {
+        const d = v.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+      // ISO string or epoch number or Date object
+      if (typeof v === 'string' || typeof v === 'number' || v instanceof Date) {
+        const d = v instanceof Date ? v : new Date(v);
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+    }
+    return null;
+  };
+
+  // Defensive formatter (used only if needed)
+  function formatMonthYear(date) {
+    if (!date) return '';
+    try {
+      return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    } catch {
+      return String(date);
+    }
+  }
+
+  // Helper to filter orders by month/year safely
+  const ordersInMonth = (month, year) => (orders || []).filter(order => {
+    const d = getOrderDate(order);
+    if (!d) return false;
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  // Selected month/year
+  const now = selectedMonthDate;
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // Orders for selected month
+  const filteredOrdersForMonth = ordersInMonth(currentMonth, currentYear);
+
+  // Metrics for selected month
+  const totalOrdersThisMonth = filteredOrdersForMonth.length;
+  const completedOrdersThisMonth = filteredOrdersForMonth.filter(order => (order.OrderStatus ?? order.status) === 'Completed').length;
+  const pendingOrdersThisMonth = filteredOrdersForMonth.filter(order => (order.OrderStatus ?? order.status) === 'Pending').length;
+
+  const avgAttemptsThisMonth = filteredOrdersForMonth.length > 0
+    ? (filteredOrdersForMonth.reduce((sum, o) => sum + (Number(o.NumberOfAttempts) || 1), 0) / filteredOrdersForMonth.length)
+    : 0;
+
+  const successRateThisMonth = filteredOrdersForMonth.length > 0
+    ? `${Math.round((completedOrdersThisMonth / filteredOrdersForMonth.length) * 100)}%`
+    : '0%';
+
+  // helpers for table display
+  const getOrderRating = (order) => {
+    const r = order.CustomerRating ?? order.rating ?? order.Rating ?? null;
+    return (r === '' || r === null || typeof r === 'undefined') ? null : Number(r);
+  };
+
+  // Month navigation handlers
+  const prevMonth = () => setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const nextMonth = () => setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Order Management</h3>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">Order Management</h3>
+
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={prevMonth}
+              className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+              title="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <div className="text-sm font-medium">{formatMonthYear(selectedMonthDate)}</div>
+
+            <button
+              onClick={nextMonth}
+              className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+              title="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">{orders.length}</p>
+              <p className="text-sm font-medium text-gray-600">Total Orders (month)</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">{totalOrdersThisMonth}</p>
             </div>
             <div className="p-3 bg-blue-50 rounded-lg">
               <Package className="h-6 w-6 text-blue-600" />
             </div>
           </div>
         </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Success Rate</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{successRate}</p>
-              <p className="text-xs text-gray-500 mt-1">All orders completed</p>
+              <p className="text-sm font-medium text-gray-600">Success Rate (month)</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{successRateThisMonth}</p>
+              <p className="text-xs text-gray-500 mt-1">Completed / total (month)</p>
             </div>
             <div className="p-3 bg-green-50 rounded-lg">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
           </div>
         </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Avg Attempts</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">{avgAttempts.toFixed(1)}</p>
-              <p className="text-xs text-gray-500 mt-1">First-time success</p>
+              <p className="text-sm font-medium text-gray-600">Avg Attempts (month)</p>
+              <p className="text-2xl font-bold text-purple-600 mt-1">{avgAttemptsThisMonth.toFixed(1)}</p>
+              <p className="text-xs text-gray-500 mt-1">Average attempts per order</p>
             </div>
             <div className="p-3 bg-purple-50 rounded-lg">
               <Clock className="h-6 w-6 text-purple-600" />
@@ -68,6 +166,7 @@ export default function OrderPerformance() {
           </div>
         </div>
       </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -81,25 +180,34 @@ export default function OrderPerformance() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {orders.map((order) => (
-              <tr key={order.OrderID}>
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{order.OrderID}</td>
+            {filteredOrdersForMonth.map((order) => (
+              <tr key={order.OrderID || order.id}>
+                <td className="px-4 py-3 text-sm font-medium text-gray-900">{order.OrderID || order.id}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(order.CustomerID)}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{getBuildingName(order.BuildingID)}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   <div className="flex items-center">
                     <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                    {order.CustomerRating}
+                    {getOrderRating(order) ?? 'N/A'}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{order.NumberOfAttempts}</td>
+                <td className="px-4 py-3 text-sm text-gray-600">{order.NumberOfAttempts ?? 1}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    {order.OrderStatus}
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    (order.OrderStatus ?? order.status) === 'Completed' ? 'bg-green-100 text-green-800'
+                      : (order.OrderStatus ?? order.status) === 'Pending' ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {order.OrderStatus ?? order.status}
                   </span>
                 </td>
               </tr>
             ))}
+            {filteredOrdersForMonth.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-gray-500">No orders for selected month.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

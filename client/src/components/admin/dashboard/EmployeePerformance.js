@@ -2,23 +2,91 @@ import React, { useEffect, useState } from 'react';
 import {
   getAllEmployees, getAllOrders
 } from '../../../services/informationService';
-import { Users, Star, Phone, Badge, TrendingUp, DollarSign } from 'lucide-react';
+import {
+  Users, Star, Phone, Badge, TrendingUp, DollarSign, ChevronLeft, ChevronRight
+} from 'lucide-react';
 
 export default function EmployeePerformance() {
   const [employees, setEmployees] = useState([]);
   const [orders, setOrders] = useState([]);
   const [incentivePerOrder, setIncentivePerOrder] = useState(5); // 💰 default incentive per order
 
+  // selected month state (focus month). Defaults to current month.
+  const [selectedMonthDate, setSelectedMonthDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
   useEffect(() => {
-    getAllEmployees().then(setEmployees);
-    getAllOrders().then(setOrders);
+    getAllEmployees().then(setEmployees).catch(err => console.warn(err));
+    getAllOrders().then(setOrders).catch(err => console.warn(err));
   }, []);
 
-  // Calculate stats for each employee
+  // Helpers for flexible field access and dates (same approach as Overview)
+  const getOrderId = (order) => order.OrderID || order.id;
+  const getOrderRating = (order) => {
+    const r = order.CustomerRating ?? order.rating ?? order.Rating ?? null;
+    return (r === '' || r === null || typeof r === 'undefined') ? null : Number(r);
+  };
+
+  // Robust getOrderDate: returns Date object or null if no valid date found.
+  const getOrderDate = (order) => {
+    if (!order) return null;
+    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    for (const f of tryFields) {
+      const v = order[f];
+      if (!v) continue;
+      // Firestore Timestamp
+      if (typeof v?.toDate === 'function') {
+        const d = v.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+      // ISO string or epoch number or Date object
+      if (typeof v === 'string' || typeof v === 'number' || v instanceof Date) {
+        const d = v instanceof Date ? v : new Date(v);
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+    }
+    return null;
+  };
+
+  // Helper: filter orders by month/year safely
+  const ordersInMonth = (month, year) => orders.filter(order => {
+    const d = getOrderDate(order);
+    if (!d) return false;
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  // Month navigation handlers
+  const prevMonth = () => {
+    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  };
+  const nextMonth = () => {
+    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  };
+
+  // Helper to format selected month for header
+  function formatMonthYear(date) {
+    if (!date) return '';
+    try {
+      return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    } catch {
+      return String(date);
+    }
+  }
+
+  // Derive current month/year and filtered orders for that month
+  const now = selectedMonthDate;
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const filteredOrdersForMonth = ordersInMonth(currentMonth, currentYear);
+
+  // Calculate stats for each employee using only orders in the selected month
   const employeeStats = employees.map(employee => {
-    const employeeOrders = orders.filter(order => order.EmployeeID === employee.EmployeeID);
-    const avgRating = employeeOrders.length > 0
-      ? employeeOrders.reduce((sum, order) => sum + (order.CustomerRating || 0), 0) / employeeOrders.length
+    const employeeOrders = filteredOrdersForMonth.filter(order => order.EmployeeID === employee.EmployeeID);
+    const ratings = employeeOrders.map(o => getOrderRating(o)).filter(r => typeof r === 'number' && !isNaN(r));
+    const avgRating = ratings.length > 0
+      ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length)
       : 0;
     const totalIncentive = employeeOrders.length * incentivePerOrder;
 
@@ -39,6 +107,35 @@ export default function EmployeePerformance() {
   return (
     <div className="space-y-6">
 
+      {/* Month navigation */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={prevMonth}
+            className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+            title="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <div className="text-lg font-semibold">
+            {formatMonthYear(selectedMonthDate)}
+          </div>
+
+          <button
+            onClick={nextMonth}
+            className="inline-flex items-center px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50"
+            title="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="text-sm text-gray-500">
+          Showing orders for selected month ({filteredOrdersForMonth.length} orders)
+        </div>
+      </div>
+
       {/* 🔧 Incentive Control Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row md:items-center md:justify-between">
         <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-3 md:mb-0">
@@ -58,8 +155,9 @@ export default function EmployeePerformance() {
       </div>
 
       {/* Top Performers Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        {topPerformers.length > 0 && (
+
+      {topPerformers.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
@@ -88,9 +186,11 @@ export default function EmployeePerformance() {
                 </div>
               ))}
             </div>
+
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
 
       {/* Employee Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -101,11 +201,10 @@ export default function EmployeePerformance() {
                 <div className="flex-1">
                   <div className="flex items-center mb-2">
                     <h4 className="font-semibold text-gray-900 text-lg">{employee.name}</h4>
-                    <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      employee.ActiveFlag !== false
+                    <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${employee.ActiveFlag !== false
                         ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
-                    }`}>
+                      }`}>
                       {employee.ActiveFlag !== false ? 'Active' : 'Inactive'}
                     </span>
                   </div>
@@ -151,16 +250,16 @@ export default function EmployeePerformance() {
         ))}
       </div>
 
-      {/* Existing Orders Table (unchanged) */}
+      {/* Orders Table for selected month */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Order Details by Employee</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Order Details by Employee (Selected Month)</h3>
           <div className="flex items-center text-sm text-gray-500">
             <Users className="h-4 w-4 mr-1" />
-            {orders.length} total orders
+            {filteredOrdersForMonth.length} orders this month
           </div>
         </div>
-        
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -173,11 +272,11 @@ export default function EmployeePerformance() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {orders.map((order) => {
+              {filteredOrdersForMonth.map((order) => {
                 const employee = employees.find(e => e.EmployeeID === order.EmployeeID);
                 return (
-                  <tr key={order.OrderID} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.OrderID}</td>
+                  <tr key={getOrderId(order)} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{getOrderId(order)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       <div>
                         <div className="font-medium">{employee?.name || 'Unknown'}</div>
@@ -198,13 +297,12 @@ export default function EmployeePerformance() {
                       {order.CustomerFeedback || 'No feedback provided'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        order.OrderStatus === 'Completed'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${order.OrderStatus === 'Completed'
                           ? 'bg-green-100 text-green-800'
                           : order.OrderStatus === 'Pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
                         {order.OrderStatus}
                       </span>
                     </td>

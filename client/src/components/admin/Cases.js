@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Clock, User, FileText, Calendar } from 'lucide-react';
 import {
-    getAllCasess,
+    getAllCases,
     getAllEmployees,
     updateCases
 } from "../../services/informationService";
 
 export default function Cases() {
-    const [Casess, setCasess] = useState([]);
+    const [cases, setCases] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
@@ -18,11 +18,11 @@ export default function Cases() {
         const loadData = async () => {
             setLoading(true);
             try {
-                const [fetchedCasess, fetchedEmployees] = await Promise.all([
-                    getAllCasess(),
+                const [fetchedcases, fetchedEmployees] = await Promise.all([
+                    getAllCases(),
                     getAllEmployees()
                 ]);
-                setCasess(fetchedCasess);
+                setCases(fetchedcases);
                 setEmployees(fetchedEmployees);
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -40,8 +40,8 @@ export default function Cases() {
     const updateCasesStatus = async (CasesId, newStatus) => {
         try {
             await updateCases(CasesId, { Status: newStatus });
-            setCasess(prevCasess =>
-                prevCasess.map(Cases =>
+            setCases(prevcases =>
+                prevcases.map(Cases =>
                     Cases.CasesID === CasesId
                         ? { ...Cases, Status: newStatus }
                         : Cases
@@ -55,7 +55,7 @@ export default function Cases() {
         }
     };
 
-    const filteredCasess = Casess.filter(Cases => {
+    const filteredCases = cases.filter(cases => {
         if (filter === 'all') return true;
         return Cases.Status === filter;
     });
@@ -91,7 +91,7 @@ export default function Cases() {
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading Casess...</p>
+                    <p className="mt-4 text-gray-600">Loading Cases...</p>
                 </div>
             </div>
         );
@@ -110,7 +110,7 @@ export default function Cases() {
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Pending Issues</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {Casess.filter(r => r.Status === 'pending').length}
+                                    {cases.filter(r => r.Status === 'pending').length}
                                 </p>
                             </div>
                         </div>
@@ -123,7 +123,7 @@ export default function Cases() {
                             <div className="ml-4">
                                 <p className="text-sm font-medium text-gray-600">Resolved Issues</p>
                                 <p className="text-2xl font-bold text-gray-900">
-                                    {Casess.filter(r => r.Status === 'resolved').length}
+                                    {cases.filter(r => r.Status === 'resolved').length}
                                 </p>
                             </div>
                         </div>
@@ -134,8 +134,8 @@ export default function Cases() {
                                 <FileText className="w-6 h-6 text-blue-600" />
                             </div>
                             <div className="ml-4">
-                                <p className="text-sm font-medium text-gray-600">Total Casess</p>
-                                <p className="text-2xl font-bold text-gray-900">{Casess.length}</p>
+                                <p className="text-sm font-medium text-gray-600">Total </p>
+                                <p className="text-2xl font-bold text-gray-900">{cases.length}</p>
                             </div>
                         </div>
                     </div>
@@ -146,7 +146,7 @@ export default function Cases() {
                     <div className="border-b border-gray-200">
                         <nav className="flex space-x-8 px-6">
                             {[
-                                { key: 'all', label: 'All Casess' },
+                                { key: 'all', label: 'All Cases' },
                                 { key: 'pending', label: 'Pending' },
                                 { key: 'resolved', label: 'Resolved' }
                             ].map(tab => (
@@ -165,7 +165,7 @@ export default function Cases() {
                     </div>
                 </div>
 
-                {/* Casess Table */}
+                {/* Cases Table */}
                 <div className="bg-white rounded-lg shadow overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -192,7 +192,7 @@ export default function Cases() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredCasess.map((Cases, idx) => (
+                                {filteredCases.map((Cases, idx) => (
                                     <tr key={Cases.CasesID} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                             {idx + 1}
@@ -243,10 +243,10 @@ export default function Cases() {
                     </div>
                 </div>
 
-                {filteredCasess.length === 0 && (
+                {filteredCases.length === 0 && (
                     <div className="text-center py-12">
                         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">No Casess found for the selected filter.</p>
+                        <p className="text-gray-500">No Cases found for the selected filter.</p>
                     </div>
                 )}
             </div>

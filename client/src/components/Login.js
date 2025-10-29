@@ -50,6 +50,12 @@ function Login() {
       // 🚀 Step 5: Redirect to Layout.js (main dashboard)
       navigate('/', { replace: true });
 
+      // right after signIn completes
+      console.log('Login: signIn completed; sessionStorage:', {
+        isAuthenticated: sessionStorage.getItem('isAuthenticated'),
+        permissions: sessionStorage.getItem('employeePermissions')
+      });
+
     } catch (err) {
       console.error('Login Error:', err);
       setError('Failed to sign in: ' + (err?.message || String(err)));

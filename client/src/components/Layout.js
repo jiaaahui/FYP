@@ -5,16 +5,9 @@ import {
   Home, Users, FileText, Menu, X, ChevronRight, User, Calendar, LogOut
 } from 'lucide-react';
 import {
-  collection,
-  query,
-  where,
-  getDocs
-} from 'firebase/firestore';
-import { db } from '../firebase';
-
-
-// Admin pages
-import Overview from './admin/dashboard/Overview';
+  // admin pages
+  default as Overview,
+} from './admin/dashboard/Overview';
 import EmployeeInfo from './admin/info/EmployeeInfo';
 import BuildingInfo from './admin/info/BuildingInfo';
 import ProductInfo from './admin/info/ProductInfo';
@@ -27,50 +20,35 @@ import EmployeePerformance from './admin/dashboard/EmployeePerformance';
 import OrderPerformance from './admin/dashboard/OrderPerformance';
 import RoleAccessControl from './admin/access/accessControl';
 import AutoScheduleReview from './admin/schedule/AutoScheduleReview';
-
-
-// Other roles
 import DeliverySchedule from './delivery/DelSchedule';
 import InstallationSchedule from './installer/InsSchedule';
 import WarehouseLoadingSchedule from './warehouse/truckSchedule';
-import { signOut } from 'firebase/auth';
 
-
-// ===============================
-// Helper: Fetch permissions for role
-// ===============================
-async function fetchRolePermissions(roleName) {
-  if (!roleName) return [];
-  try {
-    const rolesRef = collection(db, 'Roles');
-    // try to match name (some documents use generated id, some use name field)
-    const q = query(rolesRef, where('name', '==', roleName.trim().toLowerCase()));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return [];
-    const data = snapshot.docs[0].data();
-    return data.permissions || [];
-  } catch (err) {
-    console.error('Error fetching role permissions:', err);
-    return [];
-  }
-}
-
+/**
+ * Layout
+ * - Uses permissions from useAuth() to determine which side-nav sections to show
+ * - If user lands on root ("/") or on a route the user is not allowed to view,
+ *   redirect to the first allowed section and its first top tab.
+ *
+ * Key behaviors implemented to resolve "empty Layout" issue:
+ * - Waits for permissions to finish loading (loadingPermissions from AuthContext).
+ * - Computes filteredNavigation from navigationData and permissions.
+ * - If user navigates to "/" or to a route not allowed, automatically navigates to the first allowed route/topTab.
+ * - If user has no allowed sections, shows a clear "No access" message instead of empty UI.
+ */
 
 const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, permissions, employeeData, loadingPermissions, loading } = useAuth();
 
-  const [activeSection, setActiveSection] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [permissions, setPermissions] = useState([]);
-  const [loadingPermissions, setLoadingPermissions] = useState(true);
-
+  const [activeSection, setActiveSection] = useState('');
   const [topNavActive, setTopNavActive] = useState('');
 
-  // ===============================
+  // ==========================
   // Navigation structure
-  // ===============================
+  // ==========================
   const navigationData = {
     dashboard: {
       title: 'Dashboard',
@@ -146,110 +124,126 @@ const Layout = () => {
     },
   };
 
+  // normalize helper
+  const normalize = (s) => (s || '').toString().toLowerCase().trim();
 
-  // ===============================
-  // Load permissions for current user
-  // ===============================
-  useEffect(() => {
-    const loadPermissions = async () => {
-      if (!currentUser) {
-        setPermissions([]);
-        setLoadingPermissions(false);
-        return;
-      }
-      try {
-        setLoadingPermissions(true);
-        // Fetch employee record by email
-        const empRef = collection(db, 'Employee');
-        const q = query(empRef, where('email', '==', currentUser.email));
-        const snap = await getDocs(q);
+  // Determine effective permissions array from AuthContext
+  const effectivePermissions = useMemo(() => Array.isArray(permissions) ? permissions.map(p => normalize(p)) : [], [permissions]);
 
-        if (snap.empty) {
-          console.warn('No matching employee record found');
-          setPermissions([]);
-          return;
-        }
-
-        const empData = snap.docs[0].data();
-        const roleName = (empData.role || '').trim().toLowerCase();
-
-          const rolePermissions = await fetchRolePermissions(roleName);
-          // normalize keys: if your Roles.permissions contain human labels, map them to navigation keys here as needed.
-          setPermissions(rolePermissions.map(p => p));
-      } catch (err) {
-        console.error('Failed to load permissions:', err);
-        setPermissions([]);
-      } finally {
-        setLoadingPermissions(false);
-      }
-    };
-    loadPermissions();
-  }, [currentUser]);
-
-
-  // ===============================
-  // Filter visible navigation
-  // ===============================
+  // Filter navigation based on permissions. Admin gets full access.
   const filteredNavigation = useMemo(() => {
-    // guard
-    if (!Array.isArray(permissions) || permissions.length === 0) return [];
-    // keep only navigation entries whose key is present in permissions
-    return Object.entries(navigationData).filter(([key]) =>
-      permissions.includes(key)
-    );
-  }, [permissions]);
-
-
-  // ===============================
-  // Navigation actions
-  // ===============================
-  const handleSideNavClick = (sectionKey) => {
-    setActiveSection(sectionKey);
-    const section = navigationData[sectionKey];
-    if (section?.route) {
-      // navigate to section base; Layout now provides a redirect route that will forward to the first top tab
-      navigate(section.route);
+    const role = normalize(employeeData?.role || '');
+    if (role === 'admin' || effectivePermissions.includes('admin')) {
+      return Object.entries(navigationData);
     }
+    if (loadingPermissions) return [];
+    if (effectivePermissions.length === 0) return [];
+    // include entry if its key is in permissions (permission keys must match nav keys)
+    return Object.entries(navigationData).filter(([key]) => effectivePermissions.includes(key));
+  }, [employeeData, effectivePermissions, loadingPermissions]);
+
+  // Make a quick list of allowed routes (e.g., ['/dashboard', '/info', ...]) for routing checks
+  const allowedRoutes = useMemo(() => filteredNavigation.map(([, item]) => item.route), [filteredNavigation]);
+
+  // Helper: get route root from a pathname, e.g. '/dashboard/overview' -> '/dashboard'
+  const getPathRoot = (pathname) => {
+    if (!pathname) return '/';
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length === 0) return '/';
+    return `/${parts[0]}`;
   };
 
+  // When permissions finish loading or location changes, ensure we navigate to a permitted section:
+  useEffect(() => {
+    // don't act until auth restore finished (AuthProvider ensures children render after restore),
+    // and wait for permissions to be loaded.
+    if (loadingPermissions) return;
+
+    // If user has no permitted navigation, do nothing (we'll show a no-access message)
+    if (!filteredNavigation || filteredNavigation.length === 0) {
+      setActiveSection('');
+      setTopNavActive('');
+      return;
+    }
+
+    const currentRoot = getPathRoot(location.pathname);
+
+    // If user is at root path "/", navigate to first allowed section's first top tab
+    if (currentRoot === '/' || currentRoot === '') {
+      const [firstKey, firstSection] = filteredNavigation[0];
+      setActiveSection(firstKey);
+      const firstTop = firstSection.topNavItems?.[0];
+      setTopNavActive(firstTop?.id || '');
+      // navigate to the section's first top route
+      const targetPath = firstTop ? `${firstSection.route}/${firstTop.path}` : firstSection.route;
+      navigate(targetPath, { replace: true });
+      return;
+    }
+
+    // If current root isn't in allowedRoutes, redirect to first allowed
+    if (!allowedRoutes.includes(currentRoot)) {
+      const [firstKey, firstSection] = filteredNavigation[0];
+      setActiveSection(firstKey);
+      const firstTop = firstSection.topNavItems?.[0];
+      setTopNavActive(firstTop?.id || '');
+      const targetPath = firstTop ? `${firstSection.route}/${firstTop.path}` : firstSection.route;
+      navigate(targetPath, { replace: true });
+      return;
+    }
+
+    // Otherwise set activeSection based on current root
+    const matched = filteredNavigation.find(([key, item]) => item.route === currentRoot);
+    if (matched) {
+      setActiveSection(matched[0]);
+      // attempt to infer topNavActive from pathname
+      const pathParts = location.pathname.split('/').filter(Boolean);
+      const last = pathParts[pathParts.length - 1] || '';
+      const topItem = matched[1].topNavItems?.find(t => t.path === last || t.id === last);
+      setTopNavActive(topItem?.id || matched[1].topNavItems?.[0]?.id || '');
+    }
+  }, [loadingPermissions, filteredNavigation, location.pathname, navigate, allowedRoutes]);
+
+  const handleSideNavClick = (sectionKey) => {
+    const section = navigationData[sectionKey];
+    if (!section) return;
+    setActiveSection(sectionKey);
+    const firstItem = section.topNavItems?.[0];
+    setTopNavActive(firstItem?.id || '');
+    const target = firstItem ? `${section.route}/${firstItem.path}` : section.route;
+    navigate(target);
+  };
 
   const handleLogout = async () => {
     try {
       await logout();
       navigate('/login');
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error('Logout failed', error);
     }
   };
 
-
-  useEffect(() => {
-    // auto-select first accessible tab after loading
-    if (!loadingPermissions && filteredNavigation.length > 0 && !activeSection) {
-      const [firstKey, firstSection] = filteredNavigation[0];
-      setActiveSection(firstKey);
-      navigate(firstSection.route);
-    }
-  }, [loadingPermissions, filteredNavigation, navigate, activeSection]);
-
-
-  // ===============================
-  // Loading screen
-  // ===============================
-  if (loadingPermissions) {
+  // Loading and no access states
+  if (loading || loadingPermissions) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading permissions...</div>
+        <div className="text-gray-600">Loading...</div>
       </div>
     );
   }
 
+  if (!filteredNavigation || filteredNavigation.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="max-w-lg text-center p-6 bg-white rounded shadow">
+          <h2 className="text-lg font-semibold mb-2">No access</h2>
+          <p className="text-sm text-gray-600 mb-4">You don't have access to any sections. Contact an administrator to grant access.</p>
+          <button onClick={handleLogout} className="px-4 py-2 bg-blue-600 text-white rounded">Logout</button>
+        </div>
+      </div>
+    );
+  }
 
-  // ===============================
-  // Layout rendering
-  // ===============================
-  const currentSection = navigationData[activeSection] || {};
-
+  const currentSection = navigationData[activeSection] || filteredNavigation[0][1];
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gray-50">
@@ -264,7 +258,7 @@ const Layout = () => {
               <span className="text-xl font-bold text-gray-800 truncate">TBMDelivery</span>
             </div>
           )}
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg hover:bg-gray-100">
+          <button onClick={() => setIsSidebarOpen(prev => !prev)} className="p-2 rounded-lg hover:bg-gray-100">
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -272,7 +266,7 @@ const Layout = () => {
         <nav className="flex-1 overflow-y-auto px-3 py-6">
           <div className="space-y-2">
             {filteredNavigation.map(([key, item]) => {
-              const Icon = item.icon;
+              const IconComponent = item.icon;
               const isActive = activeSection === key;
               return (
                 <button
@@ -283,14 +277,13 @@ const Layout = () => {
                     : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'
                     }`}
                 >
-                  <Icon size={20} className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-600'}`} />
+                  <IconComponent size={20} className={`flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-600'}`} />
                   {isSidebarOpen && (
                     <>
                       <span className="ml-3 font-medium truncate">{item.title}</span>
                       <ChevronRight
                         size={16}
-                        className={`ml-auto flex-shrink-0 transition-transform ${isActive ? 'rotate-90 text-white' : 'text-gray-400 group-hover:text-blue-600'
-                          }`}
+                        className={`ml-auto flex-shrink-0 transition-transform ${isActive ? 'rotate-90 text-white' : 'text-gray-400 group-hover:text-blue-600'}`}
                       />
                     </>
                   )}
@@ -301,16 +294,16 @@ const Layout = () => {
         </nav>
       </div>
 
-      {/* Main Content */}
+      {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <h1 className="text-xl font-bold text-gray-800 truncate">{currentSection.title}</h1>
+            <h1 className="text-xl font-bold text-gray-800 truncate">{currentSection?.title || 'TBMDelivery'}</h1>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 p-2 text-gray-700 rounded-lg">
                 <User size={20} />
-                <span className="hidden md:block font-medium">{currentUser?.displayName || currentUser?.email || 'User'}</span>
+                <span className="hidden md:block font-medium">{currentUser?.name || currentUser?.email || 'User'}</span>
               </div>
               <button
                 onClick={handleLogout}
@@ -348,12 +341,11 @@ const Layout = () => {
           )}
         </div>
 
-        {/* Main body routes */}
+        {/* Content */}
         <div className="flex-1 overflow-auto p-2">
           <Routes>
             {/*
-              Add a redirect Route for each section base path -> first topNavItems child.
-              This prevents "No routes matched location '/dashboard'" when navigating to the base path.
+              Add redirect routes for each section's base path to its first top child path, plus all top child routes
             */}
             {Object.entries(navigationData).map(([sectionKey, section]) => {
               const firstTop = section.topNavItems && section.topNavItems[0];
@@ -378,19 +370,14 @@ const Layout = () => {
                 ) : null
               )
             )}
-            {/* Optionally add a root redirect to first allowed section */}
-            {filteredNavigation.length > 0 && (
-              <Route
-                path="/"
-                element={<Navigate to={filteredNavigation[0][1].route + '/' + (filteredNavigation[0][1].topNavItems?.[0]?.path || '')} replace />}
-              />
-            )}
+
+            {/* default route: if user navigates to root, the useEffect above will redirect, but keep a fallback */}
+            <Route path="/" element={<Navigate to={filteredNavigation[0][1].route + '/' + (filteredNavigation[0][1].topNavItems?.[0]?.path || '')} replace />} />
           </Routes>
         </div>
       </div>
     </div>
   );
 };
-
 
 export default Layout;

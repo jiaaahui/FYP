@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  getAllEmployees, getAllOrders, getAllCasess
+  getAllEmployees, getAllOrders, getAllCases
 } from '../../../services/informationService';
 import {
   Users, Star, CheckCircle, AlertCircle, TrendingUp, TrendingDown,
-  Activity, Clock, Package, Calendar, BarChart3, PieChart, DollarSign,
-  ChevronLeft, ChevronRight, Download
+  Activity, Clock, Package, Calendar, BarChart3, PieChart, ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -20,7 +19,7 @@ import {
   ArcElement,
   Filler
 } from 'chart.js';
-import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -116,9 +115,9 @@ const ChartCard = ({ title, children, className = "" }) => (
 export default function Overview() {
   const [employees, setEmployees] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [Casess, setCasess] = useState([]);
+  const [cases, setCases] = useState([]);
 
-  // New: selected month state (focus month). Defaults to current month.
+  // selected month state (focus month). Defaults to current month.
   const [selectedMonthDate, setSelectedMonthDate] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -127,30 +126,68 @@ export default function Overview() {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    getAllEmployees().then(setEmployees);
-    getAllOrders().then(setOrders);
-    getAllCasess().then(setCasess);
+    getAllEmployees().then(setEmployees).catch(err => console.warn(err));
+    getAllOrders().then(setOrders).catch(err => console.warn(err));
+    getAllCases().then(setCases).catch(err => console.warn(err));
   }, []);
 
   // Helpers for flexible field access
   const getOrderId = (order) => order.OrderID || order.id;
-  const getOrderRating = (order) => order.CustomerRating ?? order.rating ?? '';
+  const getOrderRating = (order) => {
+    const r = order.CustomerRating ?? order.rating ?? order.Rating ?? null;
+    return (r === '' || r === null || typeof r === 'undefined') ? null : Number(r);
+  };
   const getOrderFeedback = (order) => order.CustomerFeedback ?? order.feedback ?? '';
   const getOrderStatus = (order) => order.OrderStatus ?? order.status ?? '';
+  const getCasesId = (c) => c.CasesID || c.id;
+  const getCasesContent = (c) => c.Content ?? c.content ?? '';
+  const getCasesStatus = (c) => c.Status ?? c.status ?? '';
+
+  // Robust getOrderDate: returns Date object or null if no valid date found.
   const getOrderDate = (order) => {
-    if (order.ActualArrivalDateTime) return new Date(order.ActualArrivalDateTime.toDate ? order.ActualArrivalDateTime.toDate() : order.ActualArrivalDateTime);
-    if (order.DeliveredDate) return new Date(order.DeliveredDate.toDate ? order.DeliveredDate.toDate() : order.DeliveredDate);
-    if (order.OrderDate) return new Date(order.OrderDate.toDate ? order.OrderDate.toDate() : order.OrderDate);
-    if (order.createdAt) return new Date(order.createdAt.toDate ? order.createdAt.toDate() : order.createdAt);
-    return new Date();
+    if (!order) return null;
+    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    for (const f of tryFields) {
+      const v = order[f];
+      if (!v) continue;
+      // Firestore Timestamp
+      if (typeof v?.toDate === 'function') {
+        const d = v.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+      // ISO string or epoch number or Date object
+      if (typeof v === 'string' || typeof v === 'number' || v instanceof Date) {
+        const d = v instanceof Date ? v : new Date(v);
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+    }
+    // If no known date fields, return null to avoid misattributing to current month
+    return null;
   };
+
+  // Robust getCasesDate: similar to getOrderDate for cases
+  const getCasesDate = (c) => {
+    if (!c) return null;
+    const tryFields = ['createdAt', 'CreatedAt', 'Date', 'ReportDate'];
+    for (const f of tryFields) {
+      const v = c[f];
+      if (!v) continue;
+      if (typeof v?.toDate === 'function') {
+        const d = v.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+      if (typeof v === 'string' || typeof v === 'number' || v instanceof Date) {
+        const d = v instanceof Date ? v : new Date(v);
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      }
+    }
+    return null;
+  };
+
   const getOrderDeliveredDate = (order) => {
     const date = getOrderDate(order);
-    return formatDateDisplay(date);
+    return date ? formatDateDisplay(date) : '';
   };
-  const getCasesId = (Cases) => Cases.CasesID || Cases.id;
-  const getCasesContent = (Cases) => Cases.Content ?? Cases.content ?? '';
-  const getCasesStatus = (Cases) => Cases.Status ?? Cases.status ?? '';
 
   // Defensive date formatter
   function formatDateDisplay(dateInput) {
@@ -186,48 +223,68 @@ export default function Overview() {
     }
   }
 
-  // Current metrics (based on all data)
-  const avgRating = orders.filter(o => getOrderRating(o)).length > 0
-    ? (orders.reduce((sum, o) => sum + (getOrderRating(o) ? Number(getOrderRating(o)) : 0), 0) / orders.filter(o => getOrderRating(o)).length)
-    : 0;
-  const completedOrders = orders.filter(order => getOrderStatus(order) === 'Completed').length;
-  const pendingOrders = orders.filter(order => getOrderStatus(order) === 'Pending').length;
-  const activeEmployees = employees.filter(e => e.ActiveFlag !== false && e.active !== false).length;
-  const pendingCasess = Casess.filter(Cases => getCasesStatus(Cases) === 'pending').length;
-  const totalRevenue = completedOrders * 25;
+  // === Month-scoped data: everything below is computed for the selected month ===
 
-  // Calculate trends (compare selected month with previous month)
+  // Selected month/year
   const now = selectedMonthDate;
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
   const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  const currentMonthOrders = orders.filter(order => {
-    const orderDate = getOrderDate(order);
-    return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+  // Helper to filter orders by month/year safely
+  const ordersInMonth = (month, year) => orders.filter(order => {
+    const d = getOrderDate(order);
+    if (!d) return false;
+    return d.getMonth() === month && d.getFullYear() === year;
   });
 
-  const lastMonthOrders = orders.filter(order => {
-    const orderDate = getOrderDate(order);
-    return orderDate.getMonth() === lastMonth && orderDate.getFullYear() === lastMonthYear;
-  });
+  // Orders for selected month and previous month
+  const currentMonthOrders = ordersInMonth(currentMonth, currentYear);
+  const lastMonthOrders = ordersInMonth(lastMonth, lastMonthYear);
 
+  // Ratings and averages for the selected month
+  const currentMonthRatings = currentMonthOrders.map(o => getOrderRating(o)).filter(r => typeof r === 'number' && !isNaN(r));
+  const avgRating = currentMonthRatings.length > 0
+    ? (currentMonthRatings.reduce((s, r) => s + r, 0) / currentMonthRatings.length)
+    : 0;
+
+  // Completed / pending counts for selected month
   const currentMonthCompleted = currentMonthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
-  const lastMonthCompleted = lastMonthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
+  const currentMonthPending = currentMonthOrders.filter(order => getOrderStatus(order) === 'Pending').length;
 
-  const currentMonthAvgRating = currentMonthOrders.filter(o => getOrderRating(o)).length > 0
-    ? (currentMonthOrders.reduce((sum, o) => sum + (getOrderRating(o) ? Number(getOrderRating(o)) : 0), 0) / currentMonthOrders.filter(o => getOrderRating(o)).length)
-    : 0;
-  const lastMonthAvgRating = lastMonthOrders.filter(o => getOrderRating(o)).length > 0
-    ? (lastMonthOrders.reduce((sum, o) => sum + (getOrderRating(o) ? Number(getOrderRating(o)) : 0), 0) / lastMonthOrders.filter(o => getOrderRating(o)).length)
+  // Active employees for selected month = distinct employees who had orders this month
+  const activeEmployeeIdsThisMonth = Array.from(new Set(currentMonthOrders.map(o => o.EmployeeID).filter(Boolean)));
+  const activeEmployees = activeEmployeeIdsThisMonth.length;
+
+  // Cases filtered by selected month
+  const casesInMonth = cases.filter(c => {
+    const d = getCasesDate(c);
+    if (!d) return false;
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  const pendingCasess = casesInMonth.filter(c => getCasesStatus(c) === 'pending').length;
+
+  // Trends comparing this month vs last month
+  const currentMonthCompletedForTrend = currentMonthCompleted;
+  const lastMonthCompletedForTrend = lastMonthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
+
+  const currentMonthAvgRating = avgRating;
+  const lastMonthRatings = lastMonthOrders.map(o => getOrderRating(o)).filter(r => typeof r === 'number' && !isNaN(r));
+  const lastMonthAvgRating = lastMonthRatings.length > 0
+    ? (lastMonthRatings.reduce((s, r) => s + r, 0) / lastMonthRatings.length)
     : 0;
 
-  // Calculate trend percentages
-  const ordersTrend = lastMonthCompleted > 0 ? ((currentMonthCompleted - lastMonthCompleted) / lastMonthCompleted * 100) : (currentMonthCompleted > 0 ? 100 : 0);
-  const ratingTrend = lastMonthAvgRating > 0 ? ((currentMonthAvgRating - lastMonthAvgRating) / lastMonthAvgRating * 100) : 0;
-  const employeesTrend = 5; // Mock trend, you can calculate based on hire dates
-  const CasessTrend = -15; // Mock trend
+  const ordersTrend = lastMonthCompletedForTrend > 0
+    ? ((currentMonthCompletedForTrend - lastMonthCompletedForTrend) / lastMonthCompletedForTrend * 100)
+    : (currentMonthCompletedForTrend > 0 ? 100 : 0);
+
+  const ratingTrend = lastMonthAvgRating > 0
+    ? ((currentMonthAvgRating - lastMonthAvgRating) / lastMonthAvgRating * 100)
+    : (currentMonthAvgRating > 0 ? 100 : 0);
+
+  const employeesTrend = 0; // could be computed from hires in month if you have hire dates
+  const CasessTrend = 0; // optional
 
   // Prepare chart data (12 months ending at selected month)
   const monthLabels = [];
@@ -237,10 +294,9 @@ export default function Overview() {
 
   for (let i = 11; i >= 0; i--) {
     const date = new Date(currentYear, currentMonth - i, 1);
-    const monthOrders = orders.filter(order => {
-      const orderDate = getOrderDate(order);
-      return orderDate.getMonth() === date.getMonth() && orderDate.getFullYear() === date.getFullYear();
-    });
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const monthOrders = ordersInMonth(month, year);
 
     const completed = monthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
     const pending = monthOrders.filter(order => getOrderStatus(order) === 'Pending').length;
@@ -251,14 +307,14 @@ export default function Overview() {
     pendingOrdersData.push(pending);
   }
 
-  // Order status distribution
+  // Order status distribution for selected month
   const statusData = {
-    labels: ['Completed', 'Pending', 'Scheduled'],
+    labels: ['Completed', 'Pending', 'Other'],
     datasets: [{
       data: [
-        completedOrders,
-        pendingOrders,
-        orders.length - completedOrders - pendingOrders
+        currentMonthCompleted,
+        currentMonthPending,
+        Math.max(0, currentMonthOrders.length - currentMonthCompleted - currentMonthPending)
       ],
       backgroundColor: [
         '#10B981',
@@ -269,10 +325,13 @@ export default function Overview() {
     }]
   };
 
-  // Rating distribution
+  // Rating distribution for selected month
   const ratingLabels = ['1 Star', '2 Stars', '3 Stars', '4 Stars', '5 Stars'];
   const ratingCounts = [1, 2, 3, 4, 5].map(rating =>
-    orders.filter(order => Math.floor(Number(getOrderRating(order))) === rating).length
+    currentMonthOrders.filter(order => {
+      const val = getOrderRating(order);
+      return val !== null && Math.floor(Number(val)) === rating;
+    }).length
   );
 
   const ratingData = {
@@ -287,23 +346,7 @@ export default function Overview() {
     }]
   };
 
-  // Revenue trend data
-  const revenueData = {
-    labels: monthLabels,
-    datasets: [{
-      label: 'Revenue ($)',
-      data: completedOrdersData.map(count => count * 25),
-      borderColor: '#10B981',
-      backgroundColor: 'rgba(16, 185, 129, 0.1)',
-      tension: 0.4,
-      fill: true,
-      pointBackgroundColor: '#10B981',
-      pointBorderColor: '#059669',
-      pointRadius: 4,
-    }]
-  };
-
-  // Monthly orders trend data
+  // Monthly orders trend data (12 months)
   const monthlyOrdersTrendData = {
     labels: monthLabels,
     datasets: [
@@ -324,63 +367,28 @@ export default function Overview() {
     ]
   };
 
-  // Chart options
+  // Chart options (remain unchanged)
   const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'top',
-      },
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-      },
+      legend: { position: 'top' },
+      tooltip: { mode: 'index', intersect: false },
     },
     scales: {
-      x: {
-        display: true,
-        grid: {
-          display: false,
-        },
-      },
-      y: {
-        display: true,
-        beginAtZero: true,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-      },
+      x: { display: true, grid: { display: false } },
+      y: { display: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.1)' } },
     },
-    interaction: {
-      mode: 'nearest',
-      axis: 'x',
-      intersect: false,
-    },
+    interaction: { mode: 'nearest', axis: 'x', intersect: false },
   };
 
   const barChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-    },
+    plugins: { legend: { position: 'top' } },
     scales: {
-      x: {
-        display: true,
-        grid: {
-          display: false,
-        },
-      },
-      y: {
-        display: true,
-        beginAtZero: true,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-      },
+      x: { display: true, grid: { display: false } },
+      y: { display: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.1)' } },
     },
   };
 
@@ -388,18 +396,12 @@ export default function Overview() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'bottom',
-        labels: {
-          padding: 20,
-          usePointStyle: true,
-        },
-      },
+      legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true } },
       tooltip: {
         callbacks: {
           label: function (context) {
             const total = context.dataset.data.reduce((a, b) => a + b, 0);
-            const percentage = ((context.parsed * 100) / total).toFixed(1);
+            const percentage = total === 0 ? 0 : ((context.parsed * 100) / total).toFixed(1);
             return `${context.label}: ${context.parsed} (${percentage}%)`;
           }
         }
@@ -407,54 +409,49 @@ export default function Overview() {
     },
   };
 
-  const recentCompletedOrders = orders
+  // Recent completed orders and cases: restricted to the selected month
+  const recentCompletedOrders = currentMonthOrders
     .filter(order => getOrderStatus(order) === 'Completed')
     .sort((a, b) => {
-      const da = getOrderDate(a);
-      const db = getOrderDate(b);
+      const da = getOrderDate(a) ? getOrderDate(a).getTime() : 0;
+      const db = getOrderDate(b) ? getOrderDate(b).getTime() : 0;
       return db - da;
     })
     .slice(0, 5);
 
-  const recentCasess = [...Casess].reverse().slice(0, 5);
+  const recentCasess = casesInMonth
+    .slice()
+    .sort((a, b) => {
+      const da = getCasesDate(a) ? getCasesDate(a).getTime() : 0;
+      const db = getCasesDate(b) ? getCasesDate(b).getTime() : 0;
+      return db - da;
+    })
+    .slice(0, 5);
 
   // Month navigation handlers
-  const prevMonth = () => {
-    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
-  };
-  const nextMonth = () => {
-    setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
-  };
+  const prevMonth = () => setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const nextMonth = () => setSelectedMonthDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
 
-  // Export to PDF handler
+  // Export to PDF handler (unchanged)
   const exportToPdf = async () => {
     if (!containerRef.current) return;
     try {
-      // Use html2canvas to capture the container
       const element = containerRef.current;
       const originalBackground = element.style.backgroundColor;
-      // Ensure background is white for PDF
       element.style.backgroundColor = '#ffffff';
 
-      // scale improves resolution
       const canvas = await html2canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
 
-      // Create jsPDF and add image
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-      // If content height exceeds a single page, split into pages
       if (pdfHeight <= pdf.internal.pageSize.getHeight()) {
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       } else {
-        // Add the image and create multiple pages if needed
-        let position = 0;
         const pageHeight = pdf.internal.pageSize.getHeight();
-        // Convert canvas to full-size image and draw page-by-page
-        // We'll slice the canvas vertically per pageHeight ratio
         const totalPages = Math.ceil(pdfHeight / pageHeight);
         for (let i = 0; i < totalPages; i++) {
           const y = -(i * pageHeight * (imgProps.width / pdfWidth));
@@ -466,7 +463,6 @@ export default function Overview() {
       const fileName = `dashboard-${formatMonthYear(selectedMonthDate).replace(/\s+/g, '_')}.pdf`;
       pdf.save(fileName);
 
-      // restore background
       element.style.backgroundColor = originalBackground;
     } catch (err) {
       console.error('Export to PDF failed', err);
@@ -513,14 +509,14 @@ export default function Overview() {
 
       {/* Dashboard content wrapped in ref to capture for PDF */}
       <div className="space-y-6" ref={containerRef}>
-        {/* Key Metrics */}
+        {/* Key Metrics (all based on selected month) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             title="Completed Orders"
-            value={completedOrders}
+            value={currentMonthCompleted}
             icon={CheckCircle}
             color="green"
-            subtitle={`${pendingOrders} pending`}
+            subtitle={`${currentMonthPending} pending`}
             trend={`${ordersTrend >= 0 ? '+' : ''}${ordersTrend.toFixed(1)}%`}
             trendValue={ordersTrend}
           />
@@ -534,12 +530,12 @@ export default function Overview() {
             trendValue={ratingTrend}
           />
           <StatCard
-            title="Active Employees"
+            title="Active Employees (this month)"
             value={activeEmployees}
             icon={Users}
             color="blue"
             subtitle={`${employees.length - activeEmployees} inactive`}
-            trend={`+${employeesTrend}%`}
+            trend={`${employeesTrend >= 0 ? '+' : ''}${employeesTrend}%`}
             trendValue={employeesTrend}
           />
           <StatCard
@@ -548,19 +544,19 @@ export default function Overview() {
             icon={AlertCircle}
             color="red"
             subtitle="Requires attention"
-            trend={`${CasessTrend}%`}
+            trend={`${CasessTrend >= 0 ? '+' : ''}${CasessTrend}%`}
             trendValue={CasessTrend}
           />
         </div>
 
-        {/* Secondary Metrics */}
+        {/* Secondary Metrics (month-scoped where applicable) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                <p className="text-2xl font-bold text-purple-600 mt-1">{orders.length}</p>
-                <p className="text-xs text-gray-500 mt-1">All time</p>
+                <p className="text-sm font-medium text-gray-600">Total Orders (selected month)</p>
+                <p className="text-2xl font-bold text-purple-600 mt-1">{currentMonthOrders.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Selected month</p>
               </div>
               <Package className="h-8 w-8 text-purple-600" />
             </div>
@@ -569,11 +565,11 @@ export default function Overview() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Delivery Success Rate</p>
+                <p className="text-sm font-medium text-gray-600">Delivery Success Rate (month)</p>
                 <p className="text-2xl font-bold text-emerald-600 mt-1">
-                  {orders.length > 0 ? Math.round((completedOrders / orders.length) * 100) : 0}%
+                  {currentMonthOrders.length > 0 ? Math.round((currentMonthCompleted / currentMonthOrders.length) * 100) : 0}%
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Successful deliveries rate</p>
+                <p className="text-xs text-gray-500 mt-1">Successful deliveries this month</p>
               </div>
               <TrendingUp className="h-8 w-8 text-emerald-600" />
             </div>
@@ -582,37 +578,46 @@ export default function Overview() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Est. Revenue</p>
-                <p className="text-2xl font-bold text-green-600 mt-1">${totalRevenue.toLocaleString()}</p>
-                <p className="text-xs text-gray-500 mt-1">From completed orders</p>
+                <p className="text-sm font-medium text-gray-600">Orders Count (this month)</p>
+                <p className="text-2xl font-bold text-indigo-600 mt-1">{currentMonthOrders.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Month total</p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
+              <BarChart3 className="h-8 w-8 text-indigo-600" />
             </div>
           </div>
         </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Orders Trend */}
+          {/* Monthly Orders Trend (12 months ending at selected month) */}
           <ChartCard title="Monthly Orders Trend">
             <Bar data={monthlyOrdersTrendData} options={barChartOptions} />
           </ChartCard>
 
-          {/* Order Status Distribution */}
+          {/* Order Status Distribution (selected month) */}
           <ChartCard title="Order Status Distribution">
             <Doughnut data={statusData} options={pieChartOptions} />
           </ChartCard>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Revenue Trend */}
-          <ChartCard title="Revenue Trend">
-            <Line data={revenueData} options={lineChartOptions} />
-          </ChartCard>
-
-          {/* Customer Rating Distribution */}
+          {/* Customer Rating Distribution (selected month) */}
           <ChartCard title="Customer Rating Distribution">
             <Bar data={ratingData} options={barChartOptions} />
+          </ChartCard>
+
+          {/* placeholder - can show another month-scoped chart */}
+          <ChartCard title="Activity Overview (this month)">
+            <Line data={{
+              labels: monthLabels.slice().reverse().slice(0, 6).reverse(), // small spark for last 6 months
+              datasets: [{
+                label: 'Completed (last 6 months)',
+                data: completedOrdersData.slice(-6),
+                borderColor: '#10B981',
+                backgroundColor: 'rgba(16,185,129,0.08)',
+                tension: 0.3
+              }]
+            }} options={lineChartOptions} />
           </ChartCard>
         </div>
 
@@ -620,10 +625,10 @@ export default function Overview() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Recent Completed Orders</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Recent Completed Orders (selected month)</h3>
               <div className="flex items-center text-sm text-gray-500">
                 <Clock className="h-4 w-4 mr-1" />
-                Last 5 delivered
+                Last 5 delivered this month
               </div>
             </div>
 
@@ -641,7 +646,7 @@ export default function Overview() {
               )) : (
                 <div className="text-center py-8 text-gray-500">
                   <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No recent completed orders</p>
+                  <p>No completed orders this month</p>
                 </div>
               )}
             </div>
@@ -649,7 +654,7 @@ export default function Overview() {
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">System Casess</h3>
+              <h3 className="text-lg font-semibold text-gray-900">System Casess (selected month)</h3>
               <div className="flex items-center text-sm text-gray-500">
                 <AlertCircle className="h-4 w-4 mr-1" />
                 {pendingCasess} pending
@@ -657,19 +662,19 @@ export default function Overview() {
             </div>
 
             <div className="space-y-2">
-              {recentCasess.length > 0 ? recentCasess.map((Cases) => (
+              {recentCasess.length > 0 ? recentCasess.map((c) => (
                 <ActivityItem
-                  key={getCasesId(Cases)}
+                  key={getCasesId(c)}
                   icon={AlertCircle}
-                  title={`Cases ${getCasesId(Cases)}`}
-                  description={getCasesContent(Cases) || 'System Cases'}
-                  status={getCasesStatus(Cases)}
-                  priority={getCasesStatus(Cases) === 'pending' ? 'high' : 'normal'}
+                  title={`Cases ${getCasesId(c)}`}
+                  description={getCasesContent(c) || 'System Cases'}
+                  status={getCasesStatus(c)}
+                  priority={getCasesStatus(c) === 'pending' ? 'high' : 'normal'}
                 />
               )) : (
                 <div className="text-center py-8 text-gray-500">
                   <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No recent Casess</p>
+                  <p>No recent Casess this month</p>
                 </div>
               )}
             </div>

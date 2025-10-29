@@ -153,7 +153,7 @@
   }
 
   // -- Cases (random ID) --
-  export const getAllCasess = () => getAllDocs("Report");
+  export const getAllCases = () => getAllDocs("Report");
   export const addCases = (data) => addDocGeneric("Report", data);
   export const updateCases = (id, data) => updateDocGeneric("Report", id, data);
   export const deleteCases = (id) => deleteDocGeneric("Report", id);

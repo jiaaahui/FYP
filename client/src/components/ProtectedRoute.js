@@ -1,28 +1,39 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
-function ProtectedRoute({ children, allowedRoles = [] }) {
-  // Get authentication and role from sessionStorage directly
-  const isAuthenticated = sessionStorage.getItem('isAuthenticated') === 'true';
-  const employeeRole = sessionStorage.getItem('employeeRole');
-  if (!isAuthenticated) {
+/**
+ * ProtectedRoute
+ * - Renders children only when AuthContext finished restoring session and permissions.
+ * - If not authenticated, redirects to /login.
+ * - While loading, shows a simple loading placeholder (you can replace with a spinner).
+ */
+export default function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading, loadingPermissions } = useAuth();
+
+  // Wait for initial restore to finish
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-gray-600">Restoring session...</div>
+      </div>
+    );
+  }
+
+  // If authenticated but permissions are still loading, show loading state
+  if (isAuthenticated() && loadingPermissions) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-gray-600">Loading permissions...</div>
+      </div>
+    );
+  }
+
+  // Not authenticated -> redirect to login
+  if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
-  // If roles are specified, check if user has allowed role
-  if (allowedRoles.length > 0) {
-    const normalizedUserRole = employeeRole ? employeeRole.toLowerCase().trim() : null;
-    
-    // Normalize allowed roles for comparison
-    const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase().trim());
-    
-    const hasAccess = normalizedAllowedRoles.includes(normalizedUserRole);
-    
-    if (!hasAccess) {
-      return <Navigate to="/login" replace />;
-    }
-  }
+  // Authenticated and ready -> render protected children
   return children;
 }
-
-export default ProtectedRoute;
