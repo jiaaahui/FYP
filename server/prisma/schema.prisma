@@ -1,0 +1,261 @@
+// Updated Prisma schema using UUID primary keys and legacyId to preserve Firestore document IDs.
+// - Primary key `id` is UUID string with @default(uuid()) for auto-generation.
+// - `legacyId` stores the original Firestore doc id (EMP_..., ORD_..., etc.) and is unique when present.
+// - Relations use UUID `id` fields.
+// - Adjust field names and types as needed to match your final Firestore shapes.
+//
+// After adding this file:
+// 1) set DATABASE_URL in .env
+// 2) npx prisma generate
+// 3) npx prisma db push
+//
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  legacyId    String?  @unique @map("legacy_id")
+  name        String
+  permissions String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  employees Employee[]
+}
+
+model Employee {
+  id            String   @id @default(uuid())
+  legacyId      String?  @unique @map("legacy_id") // original Firestore EmployeeID or doc id
+  employeeIdStr String?  @map("employee_id_str") // optional: keep EMP_000xx string if you want
+  name          String?
+  displayName   String?  @map("display_name")
+  email         String?  @unique
+  contactNumber String?  @map("contact_number")
+  roleId        String?  @map("role_id_uuid") // FK to Role.id (UUID)
+  activeFlag    Boolean  @default(true) @map("active_flag")
+  password      String?
+  bio           String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  role            Role?                    @relation(fields: [roleId], references: [id])
+  teamAssignments EmployeeTeamAssignment[]
+  orders          Order[]                  @relation("employee_orders")
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  legacyId  String?  @unique @map("legacy_id")
+  teamIdStr String?  @map("team_id_str")
+  teamType  String?  @map("team_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  assignments EmployeeTeamAssignment[]
+}
+
+model EmployeeTeamAssignment {
+  id         Int       @id @default(autoincrement())
+  legacyId   String?   @unique @map("legacy_id")
+  employeeId String    @map("employee_id_uuid") // references Employee.id (UUID)
+  teamId     String?   @map("team_id_uuid") // references Team.id (UUID)
+  assignedAt DateTime? @map("assigned_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  team     Team?    @relation(fields: [teamId], references: [id])
+}
+
+model Zone {
+  id        String   @id @default(uuid())
+  legacyId  String?  @unique @map("legacy_id")
+  zoneIdStr String?  @map("zone_id_str")
+  zoneName  String?  @map("zone_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  truckZones TruckZone[]
+  buildings  Building[]
+}
+
+model Building {
+  id                      String    @id @default(uuid())
+  legacyId                String?   @unique @map("legacy_id")
+  buildingIdStr           String?   @map("building_id_str") // original BLD_...
+  buildingName            String?   @map("building_name")
+  housingType             String?   @map("housing_type")
+  specialEquipmentNeeded  String?   @map("special_equipment_needed") // or Json if you prefer
+  vehicleSizeLimit        String?   @map("vehicle_size_limit")
+  vehicleLengthLimit      String?   @map("vehicle_length_limit")
+  vehicleWidthLimit       String?   @map("vehicle_width_limit")
+  postalCode              String?   @map("postal_code")
+  loadingBayAvailable     Boolean?  @map("loading_bay_available")
+  accessTimeWindowStart   String?   @map("access_time_window_start")
+  accessTimeWindowEnd     String?   @map("access_time_window_end")
+  preRegistrationRequired Boolean?  @map("pre_registration_required")
+  zoneId                  String?   @map("zone_id_uuid") // references Zone.id (UUID)
+  liftAvailable           Boolean?  @map("lift_available")
+  liftDimensions          String?   @map("lift_dimensions")
+  notes                   String?
+  parkingDistance         String?   @map("parking_distance")
+  narrowDoorways          Boolean?  @map("narrow_doorways")
+  updatedAt               DateTime? @map("updated_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  zone   Zone?   @relation(fields: [zoneId], references: [id])
+  orders Order[] @relation("building_orders")
+}
+
+model Truck {
+  id         String   @id @default(uuid())
+  legacyId   String?  @unique @map("legacy_id")
+  truckIdStr String?  @map("truck_id_str")
+  plateNo    String?  @map("car_plate")
+  lengthCM   Int?     @map("length_cm")
+  widthCM    Int?     @map("width_cm")
+  heightCM   Int?     @map("height_cm")
+  tone       Int?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  truckZones TruckZone[]
+  // explicitly name the relation so it matches the LorryTrip side
+  lorryTrips LorryTrip[] @relation("truck_lorry_trips")
+}
+
+model TruckZone {
+  id        String   @id @default(uuid())
+  legacyId  String?  @unique @map("legacy_id")
+  zoneId    String?  @map("zone_id_uuid")
+  isPrimary Boolean? @map("is_primary_zone")
+  truckId   String?  @map("truck_id_uuid")
+
+  zone  Zone?  @relation(fields: [zoneId], references: [id])
+  truck Truck? @relation(fields: [truckId], references: [id])
+}
+
+model LorryTrip {
+  id              String    @id @default(uuid())
+  legacyId        String?   @unique @map("legacy_id")
+  lorryTripIdStr  String?   @map("lorry_trip_id_str")
+  deliveryTeamId  String?   @map("delivery_team_id_uuid")
+  warehouseTeamId String?   @map("warehouse_team_id_uuid")
+  truckId         String?   @map("truck_id_uuid")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime? @map("updated_at")
+
+  // Named relation must match Truck.lorryTrips @relation("truck_lorry_trips")
+  truck Truck? @relation("truck_lorry_trips", fields: [truckId], references: [id])
+}
+
+model Product {
+  id                        String   @id @default(uuid())
+  legacyId                  String?  @unique @map("legacy_id")
+  productIdStr              String?  @map("product_id_str")
+  productName               String?  @map("product_name")
+  packageLengthCM           Int?     @map("package_length_cm")
+  packageHeightCM           Int?     @map("package_height_cm")
+  packageWidthCM            Int?     @map("package_width_cm")
+  fragileFlag               Boolean? @map("fragile_flag")
+  installerTeamRequiredFlag Boolean? @map("installer_team_required_flag")
+  dismantleTimeMin          Int?     @map("dismantle_time_min")
+  dismantleTimeMax          Int?     @map("dismantle_time_max")
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  orderProducts OrderProduct[]
+}
+
+model Customer {
+  id            String    @id @default(uuid())
+  legacyId      String?   @unique @map("legacy_id")
+  customerIdStr String?   @map("customer_id_str")
+  fullName      String?   @map("full_name")
+  email         String?
+  phone         String?   @map("phone")
+  address       String?
+  city          String?
+  postcode      String?
+  state         String?
+  createdAt     DateTime? @map("created_at")
+
+  orders Order[] @relation("customer_orders")
+}
+
+model TimeSlot {
+  id              String    @id @default(uuid())
+  legacyId        String?   @unique @map("legacy_id")
+  date            String?   @map("date")
+  timeWindowStart String?   @map("time_window_start")
+  timeWindowEnd   String?   @map("time_window_end")
+  availableFlag   Boolean?  @map("available_flag")
+  createdAt       DateTime? @map("created_at")
+}
+
+model Order {
+  id                     String    @id @default(uuid())
+  legacyId               String?   @unique @map("legacy_id")
+  orderIdStr             String?   @map("order_id_str")
+  customerId             String?   @map("customer_id_uuid")
+  buildingId             String?   @map("building_id_uuid")
+  employeeId             String?   @map("employee_id_uuid")
+  orderStatus            String?   @map("order_status")
+  numberOfAttempts       Int?      @map("number_of_attempts")
+  customerRating         Float?    @map("customer_rating")
+  proofOfDeliveryUrl     String?   @map("proof_of_delivery_url")
+  customerFeedback       String?   @map("customer_feedback")
+  timeSlotId             String?   @map("time_slot_id_uuid")
+  scheduledStartDateTime DateTime? @map("scheduled_start_date_time")
+  scheduledEndDateTime   DateTime? @map("scheduled_end_date_time")
+  actualStartDateTime    DateTime? @map("actual_start_date_time")
+  actualEndDateTime      DateTime? @map("actual_end_date_time")
+  actualArrivalDateTime  DateTime? @map("actual_arrival_date_time")
+  createdAt              DateTime? @map("created_at")
+  updatedAt              DateTime? @map("updated_at")
+
+  customer      Customer?      @relation("customer_orders", fields: [customerId], references: [id])
+  employee      Employee?      @relation("employee_orders", fields: [employeeId], references: [id])
+  building      Building?      @relation("building_orders", fields: [buildingId], references: [id])
+  orderProducts OrderProduct[]
+}
+
+model OrderProduct {
+  id                Int      @id @default(autoincrement())
+  legacyId          String?  @unique @map("legacy_id")
+  orderId           String   @map("order_id_uuid")
+  productId         String   @map("product_id_uuid")
+  quantity          Int?     @map("quantity")
+  dismantleRequired Boolean? @map("dismantle_required")
+  dismantleTimeMin  Int?     @map("dismantle_time_min")
+  dismantleTimeMax  Int?     @map("dismantle_time_max")
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Report {
+  id        String    @id @default(uuid())
+  legacyId  String?   @unique @map("legacy_id")
+  content   String?   @map("content")
+  status    String?   @map("status")
+  createdAt DateTime? @map("created_at")
+}
+
+model Chat {
+  id            String    @id @default(uuid())
+  legacyId      String?   @unique @map("legacy_id")
+  orderNumber   String?   @map("order_number")
+  members       Json? // raw members array/object
+  names         Json? // raw names map
+  createdAt     DateTime? @map("created_at")
+  lastMessageAt DateTime? @map("last_message_at")
+}
+
+model AccessLog {
+  id        String    @id @default(uuid())
+  legacyId  String?   @unique @map("legacy_id")
+  changedAt DateTime? @map("changed_at")
+  changes   Json?
+}

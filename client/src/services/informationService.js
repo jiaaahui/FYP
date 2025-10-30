@@ -1,208 +1,252 @@
-  import { db } from "../firebase";
-  import {
-    collection, getDocs, doc, updateDoc, deleteDoc, setDoc, addDoc, query, where
-  } from "firebase/firestore";
+// informationService.js
+// Replaced Firestore client access with REST API calls to the Express + Prisma backend.
+// - Keeps the same exported function names as before so frontend components can be updated gradually.
+// - Uses fetch; optional bearer token read from localStorage 'token' (adjust as needed).
+// - If your backend uses different endpoints or requires different field names, adjust the `endpointMap` below.
+//
+// Usage:
+//  - Set REACT_APP_API_BASE_URL in your environment (e.g. http://localhost:4000)
+//  - Drop this file in client/src/services and import functions as before.
 
-  // ========== GENERIC HELPERS ==========
+const API_BASE = process.env.REACT_APP_API_BASE_URL || (window.location.origin.replace(/:\d+$/, ':4000'));
 
-  async function getAllDocs(collectionName) {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    return querySnapshot.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
+// Map Firestore collection names (original) to REST endpoints provided by the server
+const endpointMap = {
+  Employee: 'employees',
+  Truck: 'trucks',
+  Zone: 'zones',
+  TruckZone: 'truck-zones',
+  Building: 'buildings',
+  Product: 'products',
+  Team: 'teams',
+  EmployeeTeamAssignment: 'assignments',
+  Report: 'reports',
+  Customer: 'customers',
+  Order: 'orders',
+  OrderProduct: 'order-products',
+  TimeSlot: 'time-slots',
+  LorryTrip: 'lorry-trips',
+  Roles: 'roles',
+  TruckZoneList: 'truck-zones'
+};
+
+// Generic fetch wrapper that attaches auth token if present.
+async function apiFetch(path, options = {}) {
+  const url = path.startsWith('http') ? path : `${API_BASE.replace(/\/$/, '')}/api/${path.replace(/^\/+/, '')}`;
+  const headers = options.headers || {};
+  headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const opts = { credentials: 'same-origin', ...options, headers };
+  if (opts.body && typeof opts.body !== 'string') {
+    opts.body = JSON.stringify(opts.body);
   }
-
-  /**
-   * Get next sequential ID for collections using custom IDs.
-   * @param {string} collectionName Firestore collection name
-   * @param {string} idField Field name in the data (e.g. EmployeeID)
-   * @param {string} prefix Prefix for the ID (e.g. EMP_)
-   */
-  async function getNextCustomID(collectionName, idField, prefix) {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    let maxNumber = 0;
-    querySnapshot.forEach(docSnap => {
-      const customId = docSnap.data()[idField];
-      if (customId && new RegExp(`^${prefix}\\d{5}$`).test(customId)) {
-        const num = parseInt(customId.substring(prefix.length), 10);
-        if (num > maxNumber) maxNumber = num;
-      }
-    });
-    const nextNum = maxNumber + 1;
-    return `${prefix}${nextNum.toString().padStart(5, "0")}`;
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => null);
+    const err = new Error(`API request failed: ${res.status} ${res.statusText} ${text ? ` - ${text}` : ''}`);
+    err.status = res.status;
+    throw err;
   }
+  // try to return json, otherwise raw text
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return res.json();
+  return res.text();
+}
 
-  /**
-   * Add document, with custom or random ID.
-   * @param {string} collectionName
-   * @param {object} data
-   * @param {object} [custom] - { idField, prefix }
-   */
-  async function addDocGeneric(collectionName, data, custom) {
-    if (custom && custom.idField && custom.prefix) {
-      const customId = await getNextCustomID(collectionName, custom.idField, custom.prefix);
-      const newData = { ...data, [custom.idField]: customId };
-      const docRef = doc(db, collectionName, customId);
-      await setDoc(docRef, newData);
-      return { id: customId, ...newData };
-    } else {
-      const docRef = await addDoc(collection(db, collectionName), data);
-      return { id: docRef.id, ...data };
-    }
+// ========== GENERIC HELPERS ==========
+
+async function getAllDocs(collectionName) {
+  const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
+  const result = await apiFetch(`${endpoint}`);
+  // assume server returns { meta, data } or an array
+  if (Array.isArray(result)) return result;
+  return result.data || result;
+}
+
+async function getDocById(collectionName, id) {
+  const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
+  const result = await apiFetch(`${endpoint}/${encodeURIComponent(id)}`);
+  return result;
+}
+
+async function addDocGeneric(collectionName, data, custom) {
+  // custom ID generation handled by server; keep API simple: POST /api/{resource}
+  const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
+  const res = await apiFetch(`${endpoint}`, { method: 'POST', body: data });
+  return res;
+}
+
+async function updateDocGeneric(collectionName, id, data) {
+  const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
+  const res = await apiFetch(`${endpoint}/${encodeURIComponent(id)}`, { method: 'PUT', body: data });
+  return res;
+}
+
+async function deleteDocGeneric(collectionName, id) {
+  const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
+  const res = await apiFetch(`${endpoint}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return res;
+}
+
+// ========== COLLECTION-SPECIFIC EXPORTS ==========
+
+// -- Employee --
+export const getAllEmployees = () => getAllDocs("Employee");
+export const getEmployeeById = (id) => getDocById("Employee", id);
+export const addEmployee = (data) => addDocGeneric("Employee", data, { idField: "EmployeeID", prefix: "EMP_" });
+export const updateEmployee = (id, data) => updateDocGeneric("Employee", id, data);
+export const deleteEmployee = (id) => deleteDocGeneric("Employee", id);
+
+// -- Truck --
+export const getAllTrucks = () => getAllDocs("Truck");
+export const getTruckById = (id) => getDocById("Truck", id);
+export const addTruck = (data) => addDocGeneric("Truck", data, { idField: "truck_id", prefix: "TRK_" });
+export const updateTruck = (id, data) => updateDocGeneric("Truck", id, data);
+export const deleteTruck = (id) => deleteDocGeneric("Truck", id);
+
+// -- Zone --
+export const getAllZones = () => getAllDocs("Zone");
+export const getZoneById = (id) => getDocById("Zone", id);
+export const addZone = (data) => addDocGeneric("Zone", data, { idField: "zone_id", prefix: "ZON_" });
+export const updateZone = (id, data) => updateDocGeneric("Zone", id, data);
+export const deleteZone = (id) => deleteDocGeneric("Zone", id);
+
+// -- TruckZone --
+export const getAllTruckZone = () => getAllDocs("TruckZone");
+export const addTruckZone = (data) => addDocGeneric("TruckZone", data);
+export const updateTruckZone = (id, data) => updateDocGeneric("TruckZone", id, data);
+export const deleteTruckZone = (id) => deleteDocGeneric("TruckZone", id);
+
+// -- Building --
+export const getAllBuildings = () => getAllDocs("Building");
+export const getBuilding = (id) => getDocById("Building", id);
+export const addBuilding = (data) => addDocGeneric("Building", data, { idField: "building_id", prefix: "BLD_" });
+export const updateBuilding = (id, data) => updateDocGeneric("Building", id, data);
+export const deleteBuilding = (id) => deleteDocGeneric("Building", id);
+
+// -- Product --
+export const getAllProducts = () => getAllDocs("Product");
+export const getProduct = (id) => getDocById("Product", id);
+export const addProduct = (data) => addDocGeneric("Product", data, { idField: "product_id", prefix: "PRD_" });
+export const updateProduct = (id, data) => updateDocGeneric("Product", id, data);
+export const deleteProduct = (id) => deleteDocGeneric("Product", id);
+
+// -- Team --
+export const getAllTeams = () => getAllDocs("Team");
+export const getTeam = (id) => getDocById("Team", id);
+export const addTeam = (data) => addDocGeneric("Team", data, { idField: "TeamID", prefix: "TEM_" });
+export const updateTeam = (id, data) => updateDocGeneric("Team", id, data);
+export const deleteTeam = (id) => deleteDocGeneric("Team", id);
+
+// -- EmployeeTeamAssignment --
+export const getAllEmployeeTeamAssignments = () => getAllDocs("EmployeeTeamAssignment");
+export const getEmployeeTeamAssignment = (id) => getDocById("EmployeeTeamAssignment", id);
+export const deleteEmployeeTeamAssignment = (id) => deleteDocGeneric("EmployeeTeamAssignment", id);
+
+// assignOrUpdateEmployeeTeam: tries to find existing assignment and update, otherwise create
+export async function assignOrUpdateEmployeeTeam(employeeId, teamId) {
+  // fetch assignments and find one for the employee
+  const list = await getAllEmployeeTeamAssignments();
+  // assignments returned include employee (may be nested)
+  const found = list.data ? list.data.find(a => {
+    const emp = a.employee || a.employeeId || a.employeeIdStr || a.EmployeeID;
+    // compare with legacy id or employeeIdStr
+    return emp === employeeId || (a.employee && (a.employee.legacyId === employeeId || a.employee.employeeIdStr === employeeId));
+  }) : list.find(a => (a.employeeId === employeeId || a.employeeIdStr === employeeId || (a.employee && (a.employee.legacyId === employeeId || a.employee.employeeIdStr === employeeId))));
+  if (found) {
+    // update assignment - set teamId (API expects UUID or legacy depending on backend)
+    return updateDocGeneric("EmployeeTeamAssignment", found.id || found.legacyId, { teamId: teamId });
+  } else {
+    // create new assignment - backend should accept employee reference as legacyId or uuid
+    return addDocGeneric("EmployeeTeamAssignment", { EmployeeID: employeeId, TeamID: teamId });
   }
+}
 
-  /**
-   * Update document by ID.
-   */
-  async function updateDocGeneric(collectionName, id, data) {
-    const docRef = doc(db, collectionName, id);
-    await updateDoc(docRef, data);
+// -- Order / OrderProduct --
+export const getAllOrders = () => getAllDocs("Order");
+export const getOrder = (id) => getDocById("Order", id);
+export const addOrder = (data) => addDocGeneric("Order", data, { idField: "OrderID", prefix: "ORD_" });
+export const updateOrder = (id, data) => updateDocGeneric("Order", id, data);
+export const deleteOrder = (id) => deleteDocGeneric("Order", id);
+
+export const getAllOrderProducts = () => getAllDocs("OrderProduct");
+export const addOrderProduct = (data) => addDocGeneric("OrderProduct", data);
+export const updateOrderProduct = (id, data) => updateDocGeneric("OrderProduct", id, data);
+export const deleteOrderProduct = (id) => deleteDocGeneric("OrderProduct", id);
+
+export async function getOrderProductsByOrderId(orderId) {
+  // GET all order-products then filter client-side by orderId (backend can be enhanced to support filter)
+  const res = await getAllOrderProducts();
+  const items = res.data || res;
+  return items.filter(op => (op.OrderID === orderId || op.orderIdStr === orderId || op.orderId === orderId));
+}
+
+// -- Product helpers
+export async function getProductById(productId) {
+  // try server endpoint first
+  try {
+    const p = await getProduct(productId);
+    return p;
+  } catch {
+    // fallback to fetching all and matching by productId field
+    const list = await getAllProducts();
+    const items = list.data || list;
+    return items.find(i => i.ProductID === productId || i.productIdStr === productId || i.legacyId === productId) || null;
   }
+}
 
-  /**
-   * Delete document by ID.
-   */
-  async function deleteDocGeneric(collectionName, id) {
-    const docRef = doc(db, collectionName, id);
-    await deleteDoc(docRef);
+// -- Building helper
+export async function getBuildingById(buildingId) {
+  try {
+    const b = await getBuilding(buildingId);
+    return b;
+  } catch {
+    const list = await getAllBuildings();
+    const items = list.data || list;
+    return items.find(i => i.BuildingID === buildingId || i.buildingIdStr === buildingId || i.legacyId === buildingId) || null;
   }
+}
 
-  // ========== COLLECTION-SPECIFIC EXPORTS ==========
+// -- Cases --
+export const getAllCases = () => getAllDocs("Report");
+export const addCases = (data) => addDocGeneric("Report", data);
+export const updateCases = (id, data) => updateDocGeneric("Report", id, data);
+export const deleteCases = (id) => deleteDocGeneric("Report", id);
 
-  // -- Employee (custom ID: EmployeeID) --
-  export const getAllEmployees = () => getAllDocs("Employee");
-  export const addEmployee = (data) => addDocGeneric("Employee", data, { idField: "EmployeeID", prefix: "EMP_" });
-  export const updateEmployee = (id, data) => updateDocGeneric("Employee", id, data);
-  export const deleteEmployee = (id) => deleteDocGeneric("Employee", id);
+// -- Customer --
+export const getAllCustomers = () => getAllDocs("Customer");
+export const getCustomer = (id) => getDocById("Customer", id);
+export const addCustomer = (data) => addDocGeneric("Customer", data, { idField: "CustomerID", prefix: "CUS_" });
+export const updateCustomer = (id, data) => updateDocGeneric("Customer", id, data);
+export const deleteCustomer = (id) => deleteDocGeneric("Customer", id);
 
-  // -- Truck (custom ID: truck_id) --
-  export const getAllTrucks = () => getAllDocs("Truck");
-  export const addTruck = (data) => addDocGeneric("Truck", data, { idField: "truck_id", prefix: "TRK_" });
-  export const updateTruck = (id, data) => updateDocGeneric("Truck", id, data);
-  export const deleteTruck = (id) => deleteDocGeneric("Truck", id);
+// -- TimeSlot --
+export const getAllTimeSlots = () => getAllDocs("TimeSlot");
+export const addTimeSlot = (data) => addDocGeneric("TimeSlot", data, { idField: "TimeSlotID", prefix: "TSL_" });
+export const updateTimeSlot = (id, data) => updateDocGeneric("TimeSlot", id, data);
+export const deleteTimeSlot = (id) => deleteDocGeneric("TimeSlot", id);
 
-  // -- Zone (custom ID: zone_id) --
-  export const getAllZones = () => getAllDocs("Zone");
-  export const addZone = (data) => addDocGeneric("Zone", data, { idField: "zone_id", prefix: "ZON_" });
-  export const updateZone = (id, data) => updateDocGeneric("Zone", id, data);
-  export const deleteZone = (id) => deleteDocGeneric("Zone", id);
+// -- LorryTrip --
+export const getAllLorryTrips = () => getAllDocs("LorryTrip");
+export const addLorryTrip = (data) => addDocGeneric("LorryTrip", data, { idField: "LorryTripID", prefix: "TRP_" });
+export const updateLorryTrip = (id, data) => updateDocGeneric("LorryTrip", id, data);
+export const deleteLorryTrip = (id) => deleteDocGeneric("LorryTrip", id);
 
-  // -- TruckZone (random ID) --
-  export const getAllTruckZone = () => getAllDocs("TruckZone");
-  export const addTruckZone = (data) => addDocGeneric("TruckZone", data);
-  export const updateTruckZone = (id, data) => updateDocGeneric("TruckZone", id, data);
-  export const deleteTruckZone = (id) => deleteDocGeneric("TruckZone", id);
+// -- Roles
+export const getRoles = () => getAllDocs("Roles");
 
-  // -- Building (custom ID: building_id) --
-  export const getAllBuildings = () => getAllDocs("Building");
-  export const addBuilding = (data) => addDocGeneric("Building", data, { idField: "building_id", prefix: "BLD_" });
-  export const updateBuilding = (id, data) => updateDocGeneric("Building", id, data);
-  export const deleteBuilding = (id) => deleteDocGeneric("Building", id);
+// ========== COMMON HELPERS ==========
 
-  // -- Product (custom ID: product_id) --
-  export const getAllProducts = () => getAllDocs("Product");
-  export const addProduct = (data) => addDocGeneric("Product", data, { idField: "product_id", prefix: "PRD_" });
-  export const updateProduct = (id, data) => updateDocGeneric("Product", id, data);
-  export const deleteProduct = (id) => deleteDocGeneric("Product", id);
-
-  // -- Team (custom ID: TeamID) --
-  export const getAllTeams = () => getAllDocs("Team");
-  export const addTeam = (data) => addDocGeneric("Team", data, { idField: "TeamID", prefix: "TEM_" });
-  export const updateTeam = (id, data) => updateDocGeneric("Team", id, data);
-  export const deleteTeam = (id) => deleteDocGeneric("Team", id);
-
-  // -- EmployeeTeamAssignment (random ID, standard CRUD) --
-  export const getAllEmployeeTeamAssignments = () => getAllDocs("EmployeeTeamAssignment");
-  export const deleteEmployeeTeamAssignment = (id) => deleteDocGeneric("EmployeeTeamAssignment", id);
-
-  export async function assignOrUpdateEmployeeTeam(employeeId, teamId) {
-    const assignmentsRef = collection(db, "EmployeeTeamAssignment");
-    const q = query(assignmentsRef, where("EmployeeID", "==", employeeId));
-    const querySnapshot = await getDocs(q);
-
-    if (!querySnapshot.empty) {
-      // Update the first found
-      const docId = querySnapshot.docs[0].id;
-      await updateDocGeneric("EmployeeTeamAssignment", docId, { TeamID: teamId });
-      return { id: docId, EmployeeID: employeeId, TeamID: teamId };
-    } else {
-      // Add new
-      const result = await addDocGeneric("EmployeeTeamAssignment", { EmployeeID: employeeId, TeamID: teamId });
-      return result;
-    }
-  }
-
-  export async function getOrderProductsByOrderId(orderId) {
-    const orderProductCol = collection(db, "OrderProduct");
-    const q = query(orderProductCol, where("OrderID", "==", orderId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
-
-  export async function getProductById(productId) {
-      const snapshot = await getDocs(query(collection(db, "Product"), where("ProductID", "==", productId)));
-      if (snapshot.empty) return null;
-      return snapshot.docs[0].data();
-    }
-
-  export async function getBuildingById(buildingId) {
-    const snapshot = await getDocs(query(collection(db, "Building"), where("building_id", "==", buildingId)));
-    if (snapshot.empty) return null;
-    return snapshot.docs[0].data();
-  }
-
-  // -- Cases (random ID) --
-  export const getAllCases = () => getAllDocs("Report");
-  export const addCases = (data) => addDocGeneric("Report", data);
-  export const updateCases = (id, data) => updateDocGeneric("Report", id, data);
-  export const deleteCases = (id) => deleteDocGeneric("Report", id);
-
-  // -- Customer (custom ID: CustomerID) --
-  export const getAllCustomers = () => getAllDocs("Customer");
-  export const addCustomer = (data) => addDocGeneric("Customer", data, { idField: "CustomerID", prefix: "CUS_" });
-  export const updateCustomer = (id, data) => updateDocGeneric("Customer", id, data);
-  export const deleteCustomer = (id) => deleteDocGeneric("Customer", id);
-
-  // -- Order (custom ID: OrderID) --
-  export const getAllOrders = () => getAllDocs("Order");
-  export const addOrder = (data) => addDocGeneric("Order", data, { idField: "OrderID", prefix: "ORD_" });
-  export const updateOrder = (id, data) => updateDocGeneric("Order", id, data);
-  export const deleteOrder = (id) => deleteDocGeneric("Order", id);
-
-  // -- OrderProduct (random ID) --
-  export const getAllOrderProducts = () => getAllDocs("OrderProduct");
-  export const addOrderProduct = (data) => addDocGeneric("OrderProduct", data);
-  export const updateOrderProduct = (id, data) => updateDocGeneric("OrderProduct", id, data);
-  export const deleteOrderProduct = (id) => deleteDocGeneric("OrderProduct", id);
-
-  // -- TimeSlot (custom ID: TimeSlotID) --
-  export const getAllTimeSlots = () => getAllDocs("TimeSlot");
-  export const addTimeSlot = (data) => addDocGeneric("TimeSlot", data, { idField: "TimeSlotID", prefix: "TSL_" });
-  export const updateTimeSlot = (id, data) => updateDocGeneric("TimeSlot", id, data);
-  export const deleteTimeSlot = (id) => deleteDocGeneric("TimeSlot", id);
-
-  // -- LorryTrip (custom ID: LorryTripID) --
-  export const getAllLorryTrips = () => getAllDocs("LorryTrip");
-  export const addLorryTrip = (data) => addDocGeneric("LorryTrip", data, { idField: "LorryTripID", prefix: "TRP_" });
-  export const updateLorryTrip = (id, data) => updateDocGeneric("LorryTrip", id, data);
-  export const deleteLorryTrip = (id) => deleteDocGeneric("LorryTrip", id);
-
-    // -- Roles
-  export const getRoles = () => getAllDocs("Roles");
-
-  // ========== COMMON HELPERS ==========
-
-  // Get employee objects for a team (by TeamID)
-  export async function getEmployeesForTeam(teamId) {
-    const assignmentsCol = collection(db, 'EmployeeTeamAssignment');
-    const q = query(assignmentsCol, where('TeamID', '==', teamId));
-    const assignmentsSnap = await getDocs(q);
-    const employeeIds = assignmentsSnap.docs.map(doc => doc.data().EmployeeID);
-    if (employeeIds.length === 0) return [];
-    const employeesCol = collection(db, 'Employee');
-    const employeesSnap = await getDocs(employeesCol);
-    return employeesSnap.docs
-      .map(doc => doc.data())
-      .filter(emp => employeeIds.includes(emp.EmployeeID));
-  }
+// Get employee objects for a team (by TeamID)
+export async function getEmployeesForTeam(teamId) {
+  // fetch assignments, filter by TeamID, then fetch employees and filter by legacyId/employeeIdStr
+  const assignmentsRes = await getAllEmployeeTeamAssignments();
+  const assignments = assignmentsRes.data || assignmentsRes;
+  const matched = assignments.filter(a => a.TeamID === teamId || a.teamIdStr === teamId || a.teamId === teamId);
+  const employeeIds = matched.map(a => a.EmployeeID || (a.employee && (a.employee.legacyId || a.employee.employeeIdStr || a.employee.id))).filter(Boolean);
+  if (employeeIds.length === 0) return [];
+  const employeesRes = await getAllEmployees();
+  const employees = employeesRes.data || employeesRes;
+  return employees.filter(emp => employeeIds.includes(emp.EmployeeID) || employeeIds.includes(emp.legacyId) || employeeIds.includes(emp.employeeIdStr));
+}
