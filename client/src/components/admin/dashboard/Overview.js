@@ -126,27 +126,43 @@ export default function Overview() {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    getAllEmployees().then(setEmployees).catch(err => console.warn(err));
-    getAllOrders().then(setOrders).catch(err => console.warn(err));
-    getAllCases().then(setCases).catch(err => console.warn(err));
+    getAllEmployees().then(data => {
+      // console.log('[Dashboard] Employees fetched:', data);
+      setEmployees(data);
+    }).catch(err => console.warn('[Dashboard] Error fetching employees:', err));
+
+    getAllOrders().then(data => {
+      // console.log('[Dashboard] Orders fetched:', data);
+      // console.log('[Dashboard] First order sample:', data[0]);
+      setOrders(data);
+    }).catch(err => console.warn('[Dashboard] Error fetching orders:', err));
+
+    getAllCases().then(data => {
+      // console.log('[Dashboard] Cases fetched:', data);
+      setCases(data);
+    }).catch(err => console.warn('[Dashboard] Error fetching cases:', err));
   }, []);
 
-  // Helpers for flexible field access
-  const getOrderId = (order) => order.OrderID || order.id;
+  // Helpers for flexible field access (supports PascalCase, camelCase, and snake_case)
+  const getOrderId = (order) => order.OrderID || order.orderId || order.id;
   const getOrderRating = (order) => {
-    const r = order.CustomerRating ?? order.rating ?? order.Rating ?? null;
+    const r = order.CustomerRating ?? order.customer_rating ?? order.customerRating ?? order.rating ?? order.Rating ?? null;
     return (r === '' || r === null || typeof r === 'undefined') ? null : Number(r);
   };
-  const getOrderFeedback = (order) => order.CustomerFeedback ?? order.feedback ?? '';
-  const getOrderStatus = (order) => order.OrderStatus ?? order.status ?? '';
-  const getCasesId = (c) => c.CasesID || c.id;
+  const getOrderFeedback = (order) => order.CustomerFeedback ?? order.customer_feedback ?? order.customerFeedback ?? order.feedback ?? '';
+  const getOrderStatus = (order) => order.OrderStatus ?? order.order_status ?? order.orderStatus ?? order.status ?? '';
+  const getCasesId = (c) => c.CasesID || c.casesId || c.id;
   const getCasesContent = (c) => c.Content ?? c.content ?? '';
   const getCasesStatus = (c) => c.Status ?? c.status ?? '';
 
   // Robust getOrderDate: returns Date object or null if no valid date found.
   const getOrderDate = (order) => {
     if (!order) return null;
-    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    const tryFields = ['actual_arrival_date_time',
+      // 'DeliveredDate', 'delivered_date', 'deliveredDate',
+      // 'OrderDate', 'order_date', 'orderDate',
+      // 'created_at', 'createdAt', 'CreatedAt', 'Created'
+    ];
     for (const f of tryFields) {
       const v = order[f];
       if (!v) continue;
@@ -168,7 +184,7 @@ export default function Overview() {
   // Robust getCasesDate: similar to getOrderDate for cases
   const getCasesDate = (c) => {
     if (!c) return null;
-    const tryFields = ['createdAt', 'CreatedAt', 'Date', 'ReportDate'];
+    const tryFields = ['created_at', 'createdAt', 'CreatedAt', 'Date', 'ReportDate', 'report_date'];
     for (const f of tryFields) {
       const v = c[f];
       if (!v) continue;
@@ -254,8 +270,17 @@ export default function Overview() {
   const currentMonthPending = currentMonthOrders.filter(order => getOrderStatus(order) === 'Pending').length;
 
   // Active employees for selected month = distinct employees who had orders this month
-  const activeEmployeeIdsThisMonth = Array.from(new Set(currentMonthOrders.map(o => o.EmployeeID).filter(Boolean)));
+  const activeEmployeeIdsThisMonth = Array.from(new Set(currentMonthOrders.map(o => o.EmployeeID || o.employee_id || o.employeeId).filter(Boolean)));
   const activeEmployees = activeEmployeeIdsThisMonth.length;
+
+  console.log('[Dashboard] Current month stats:', {
+    month: formatMonthYear(selectedMonthDate),
+    totalOrders: currentMonthOrders.length,
+    completed: currentMonthCompleted,
+    pending: currentMonthPending,
+    avgRating: avgRating.toFixed(2),
+    activeEmployees
+  });
 
   // Cases filtered by selected month
   const casesInMonth = cases.filter(c => {

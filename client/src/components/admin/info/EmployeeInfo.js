@@ -132,6 +132,15 @@ export default function EmployeeInfo() {
                 getRoles()
             ]);
 
+            console.log('[EmployeeInfo] Data loaded:', {
+                employees: employeesData?.length || 0,
+                teams: teamsData?.length || 0,
+                assignments: assignmentsData?.length || 0,
+                roles: rolesData?.length || 0,
+                sampleEmployee: employeesData?.[0],
+                sampleTeam: teamsData?.[0]
+            });
+
             // Build role id -> name map and set roles list state
             const roleMap = new Map();
             (rolesData || []).forEach(r => {
@@ -139,27 +148,54 @@ export default function EmployeeInfo() {
             });
             setRolesList(rolesData || []);
 
+            // Handle both PascalCase and snake_case field names
             const teamMap = new Map();
             (teamsData || []).forEach(team => {
-                teamMap.set(team.TeamID, team.TeamType);
+                const teamId = team.TeamID || team.id;
+                const teamType = team.TeamType || team.teamType || team.team_type;
+                teamMap.set(teamId, teamType);
             });
 
             const empTeamMap = new Map();
             (assignmentsData || []).forEach(assignment => {
-                const teamType = teamMap.get(assignment.TeamID);
-                empTeamMap.set(assignment.EmployeeID, {
-                    TeamID: assignment.TeamID,
+                const empId = assignment.EmployeeID || assignment.employeeId || assignment.employee_id;
+                const teamId = assignment.TeamID || assignment.teamId || assignment.team_id;
+                const teamType = teamMap.get(teamId);
+                empTeamMap.set(empId, {
+                    TeamID: teamId,
                     TeamType: teamType
                 });
             });
 
-            const enriched = (employeesData || []).map(emp => ({
-                ...emp,
-                team: empTeamMap.get(emp.EmployeeID)?.TeamType || null,
-                teamId: empTeamMap.get(emp.EmployeeID)?.TeamID || null,
-                // roleName is a display-friendly label derived from role id or stored role string
-                roleName: roleMap.get(emp.role) || emp.role || ''
-            }));
+            const enriched = (employeesData || []).map(emp => {
+                const empId = emp.id;
+
+                // Handle role - API returns it as object from Prisma include
+                let roleId, roleName;
+                if (typeof emp.role === 'object' && emp.role !== null) {
+                    roleId = emp.role.id;
+                    roleName = emp.role.name;
+                } else {
+                    // Fallback if role is just an ID string
+                    roleId = emp.roleId || emp.role_id;
+                    roleName = roleMap.get(roleId) || '';
+                }
+
+                return {
+                    EmployeeID: empId,
+                    name: emp.name,
+                    email: emp.email,
+                    contact_number: emp.contact_number,
+                    active_flag: emp.active_flag,
+                    role: roleId,
+                    password: emp.password || '********',
+                    team: empTeamMap.get(empId)?.TeamType || null,
+                    teamId: empTeamMap.get(empId)?.TeamID || null,
+                    roleName: roleName
+                };
+            });
+
+            console.log('[EmployeeInfo] Enriched employees sample:', enriched[0]);
 
             setEmployees(employeesData || []);
             setTeams(teamsData || []);
@@ -168,7 +204,7 @@ export default function EmployeeInfo() {
             setPendingUsers(pendingData || []);
         } catch (e) {
             setError("Failed to load data: " + (e?.message || e));
-            console.error(e);
+            console.error('[EmployeeInfo] Load error:', e);
         }
         setLoading(false);
     }
@@ -300,22 +336,26 @@ export default function EmployeeInfo() {
             if (modalMode === "add") {
                 employeeData.password = modalData.password; // add password
                 const newEmp = await addEmployee(employeeData);
+                const newEmpId = newEmp.EmployeeID || newEmp.id;
 
                 if (modalData.team) {
-                    await assignOrUpdateEmployeeTeam(newEmp.EmployeeID, modalData.team);
+                    await assignOrUpdateEmployeeTeam(newEmpId, modalData.team);
                 }
 
                 setSuccessMsg("Employee added successfully!");
             } else {
                 // update existing employee
-                if (modalData.password) employeeData.password = modalData.password; // only update if entered
-                await updateEmployee(modalData.EmployeeID, employeeData);
+                if (modalData.password && modalData.password !== '********') {
+                    employeeData.password = modalData.password; // only update if entered
+                }
+                const empId = modalData.EmployeeID || modalData.id;
+                await updateEmployee(empId, employeeData);
 
                 const oldTeam = modalData.teamId ?? null;
                 const newTeam = modalData.team ?? null;
 
                 if (oldTeam !== newTeam) {
-                    await assignOrUpdateEmployeeTeam(modalData.EmployeeID, newTeam);
+                    await assignOrUpdateEmployeeTeam(empId, newTeam);
                 }
 
                 setSuccessMsg("Employee updated successfully!");
@@ -381,11 +421,15 @@ export default function EmployeeInfo() {
                     className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                     <option value="">Select a team</option>
-                    {teams.map(team => (
-                        <option key={team.TeamID} value={team.TeamID}>
-                            {team.TeamType}
-                        </option>
-                    ))}
+                    {teams.map(team => {
+                        const teamId = team.TeamID || team.id;
+                        const teamType = team.TeamType || team.teamType || team.team_type;
+                        return (
+                            <option key={teamId} value={teamId}>
+                                {teamType}
+                            </option>
+                        );
+                    })}
                 </select>
             );
         }

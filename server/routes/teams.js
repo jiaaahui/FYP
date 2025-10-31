@@ -5,7 +5,7 @@ const prisma = require('../prismaClient');
 
 router.get('/', async (req, res) => {
   try {
-    const teams = await prisma.team.findMany({
+    const teams = await prisma.teams.findMany({
       include: { assignments: { include: { employee: true } } }
     });
     res.json(teams);
@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const team = await prisma.team.create({ data: req.body });
+    const team = await prisma.teams.create({ data: req.body });
     res.status(201).json(team);
   } catch (err) {
     console.error('POST /api/teams error', err);
@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const team = await prisma.team.update({
+    const team = await prisma.teams.update({
       where: { id: req.params.id },
       data: req.body
     });
@@ -40,7 +40,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await prisma.team.delete({ where: { id: req.params.id } });
+    await prisma.teams.delete({ where: { id: req.params.id } });
     res.json({ message: 'Team deleted successfully' });
   } catch (err) {
     console.error('DELETE /api/teams/:id error', err);
