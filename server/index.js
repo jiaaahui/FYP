@@ -21,6 +21,7 @@ app.use('/api/teams', require('./routes/teams'));
 app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/trucks', require('./routes/trucks'));
 app.use('/api/zones', require('./routes/zones'));
+app.use('/api/truck-zones', require('./routes/truck-zones'));
 app.use('/api/buildings', require('./routes/buildings'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/customers', require('./routes/customers'));
@@ -51,6 +52,7 @@ app.listen(port, () => {
   console.log('  /api/assignments');
   console.log('  /api/trucks');
   console.log('  /api/zones');
+  console.log('  /api/truck-zones');
   console.log('  /api/buildings');
   console.log('  /api/products');
   console.log('  /api/customers');

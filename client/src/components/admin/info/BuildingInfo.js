@@ -70,6 +70,54 @@ function Modal({ show, onClose, children }) {
     );
 }
 
+// Helper: normalize building from API (snake_case) to component format (PascalCase)
+function normalizeBuilding(building) {
+    return {
+        id: building.id,
+        BuildingName: building.building_name || building.buildingName || building.BuildingName,
+        HousingType: building.housing_type || building.housingType || building.HousingType,
+        SpecialEquipmentNeeded: building.special_equipment_needed || building.specialEquipmentNeeded || building.SpecialEquipmentNeeded,
+        VehicleSizeLimit: building.vehicle_size_limit || building.vehicleSizeLimit || building.VehicleSizeLimit,
+        VehicleLengthLimit: building.vehicle_length_limit || building.vehicleLengthLimit || building.VehicleLengthLimit,
+        VehicleWidthLimit: building.vehicle_width_limit || building.vehicleWidthLimit || building.VehicleWidthLimit,
+        PostalCode: building.postal_code || building.postalCode || building.PostalCode,
+        LoadingBayAvailable: building.loading_bay_available ?? building.loadingBayAvailable ?? building.LoadingBayAvailable ?? false,
+        AccessTimeWindowStart: building.access_time_window_start || building.accessTimeWindowStart || building.AccessTimeWindowStart,
+        AccessTimeWindowEnd: building.access_time_window_end || building.accessTimeWindowEnd || building.AccessTimeWindowEnd,
+        PreRegistrationRequired: building.pre_registration_required ?? building.preRegistrationRequired ?? building.PreRegistrationRequired ?? false,
+        ZoneID: building.zone_id || building.zoneId || building.ZoneID,
+        LiftAvailable: building.lift_available ?? building.liftAvailable ?? building.LiftAvailable ?? false,
+        LiftDimensions: building.lift_dimensions || building.liftDimensions || building.LiftDimensions,
+        Notes: building.notes || building.Notes,
+        ParkingDistance: building.parking_distance || building.parkingDistance || building.ParkingDistance,
+        NarrowDoorways: building.narrow_doorways ?? building.narrowDoorways ?? building.NarrowDoorways ?? false,
+        zone: building.zone // Keep the relation object if present
+    };
+}
+
+// Helper: convert component format (PascalCase) to API format (snake_case)
+function toApiFormat(building) {
+    return {
+        building_name: building.BuildingName,
+        housing_type: building.HousingType,
+        special_equipment_needed: building.SpecialEquipmentNeeded || null,
+        vehicle_size_limit: building.VehicleSizeLimit || null,
+        vehicle_length_limit: building.VehicleLengthLimit || null,
+        vehicle_width_limit: building.VehicleWidthLimit || null,
+        postal_code: building.PostalCode,
+        loading_bay_available: building.LoadingBayAvailable,
+        access_time_window_start: building.AccessTimeWindowStart || null,
+        access_time_window_end: building.AccessTimeWindowEnd || null,
+        pre_registration_required: building.PreRegistrationRequired,
+        zone: building.ZoneID || null, // API expects 'zone' field that will be converted to zoneId on backend
+        lift_available: building.LiftAvailable,
+        lift_dimensions: building.LiftDimensions || null,
+        notes: building.Notes || null,
+        parking_distance: building.ParkingDistance || null,
+        narrow_doorways: building.NarrowDoorways
+    };
+}
+
 export default function BuildingInfo() {
     const [buildings, setBuildings] = useState([]);
     const [zones, setZones] = useState([]);
@@ -87,11 +135,17 @@ export default function BuildingInfo() {
         async function loadZones() {
             try {
                 const z = await getAllZones();
+                console.log('[BuildingInfo] Zones fetched:', { count: z?.length, sample: z?.[0] });
                 setZones(z);
                 const map = {};
-                z.forEach(zn => map[zn.ZoneID] = zn.ZoneName || zn.zone_name || zn.name || zn.id);
+                z.forEach(zn => {
+                    const zoneId = zn.id;
+                    const zoneName = zn.zone_name || zn.ZoneName || zn.name || zn.id;
+                    map[zoneId] = zoneName;
+                });
                 setZoneMap(map);
             } catch (e) {
+                console.error('[BuildingInfo] Load zones error:', e);
                 setError("Failed to fetch zones: " + e.message);
             }
         }
@@ -101,7 +155,14 @@ export default function BuildingInfo() {
     useEffect(() => { refreshBuildings(); }, []);
     async function refreshBuildings() {
         setLoading(true);
-        try { setBuildings(await getAllBuildings()); } catch (e) { setError("Failed to fetch buildings: " + e.message); }
+        try {
+            const data = await getAllBuildings();
+            console.log('[BuildingInfo] Buildings fetched:', { count: data?.length, sample: data?.[0] });
+            setBuildings(data.map(normalizeBuilding));
+        } catch (e) {
+            console.error('[BuildingInfo] Load error:', e);
+            setError("Failed to fetch buildings: " + e.message);
+        }
         setLoading(false);
     }
 
@@ -146,19 +207,19 @@ export default function BuildingInfo() {
         e.preventDefault();
         setSaving(true); setError(null); setSuccessMsg("");
         try {
+            const apiData = toApiFormat(modalData);
             if (modalMode === "add") {
-                const newBuilding = await addBuilding(modalData);
-                setBuildings(prev => [...prev, newBuilding]);
+                await addBuilding(apiData);
+                await refreshBuildings();
                 setSuccessMsg("Building added!");
             } else {
-                await updateBuilding(modalData.BuildingID || modalData.building_id || modalData.id, modalData);
-                setBuildings(prev =>
-                    prev.map((b, idx) => (idx === editIdx ? { ...modalData } : b))
-                );
+                await updateBuilding(modalData.id, apiData);
+                await refreshBuildings();
                 setSuccessMsg("Building updated!");
             }
             setModalOpen(false);
         } catch (e) {
+            console.error('[BuildingInfo] Save error:', e);
             setError(modalMode === "add"
                 ? "Failed to add building: " + e.message
                 : "Failed to update: " + e.message
@@ -172,9 +233,10 @@ export default function BuildingInfo() {
         setSaving(true); setError(null); setSuccessMsg("");
         try {
             await deleteBuilding(id);
-            setBuildings(prev => prev.filter(t => (t.BuildingID || t.building_id || t.id) !== id));
+            setBuildings(prev => prev.filter(b => b.id !== id));
             setSuccessMsg("Building deleted!");
         } catch (e) {
+            console.error('[BuildingInfo] Delete error:', e);
             setError("Failed to delete: " + e.message);
         }
         setSaving(false);
@@ -186,8 +248,8 @@ export default function BuildingInfo() {
                 <select name="ZoneID" value={val ?? ""} onChange={onChange} className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
                     <option value="">Select a zone</option>
                     {zones.map(z => (
-                        <option key={z.ZoneID} value={z.ZoneID}>
-                            {z.ZoneName || z.zone_name || z.name || z.id}
+                        <option key={z.id} value={z.id}>
+                            {z.zone_name || z.ZoneName || z.name || z.id}
                         </option>
                     ))}
                 </select>
@@ -276,7 +338,7 @@ export default function BuildingInfo() {
                             </tr>
                         ) : (
                             buildings.map((item, idx) => (
-                                <tr key={item.BuildingID || item.building_id || item.id} className="hover:bg-gray-50">
+                                <tr key={item.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{idx + 1}</td>
                                     {TABLE_KEYS.map(k => (
                                         <td className="px-4 py-3 text-sm text-gray-900" key={k}>
@@ -296,7 +358,7 @@ export default function BuildingInfo() {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(item.BuildingID || item.building_id || item.id)}
+                                                onClick={() => handleDelete(item.id)}
                                                 className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
                                                 title="Delete Building"
                                                 disabled={saving}

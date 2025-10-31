@@ -74,11 +74,20 @@ export default function TeamInfo() {
                 getAllEmployeeTeamAssignments(),
                 getAllEmployees()
             ]);
+
+            console.log('[TeamInfo] Data loaded:', {
+                teams: teamsData?.length,
+                assignments: assignmentsData?.length,
+                employees: employeesData?.length,
+                sampleTeam: teamsData?.[0]
+            });
+
             setTeams(teamsData);
             setAssignments(assignmentsData);
             setEmployees(employeesData);
         } catch (e) {
             setError("Failed to load data: " + e.message);
+            console.error('[TeamInfo] Load error:', e);
         }
         setLoading(false);
     }
@@ -86,14 +95,14 @@ export default function TeamInfo() {
     // Get members for a team
     function getTeamMembers(teamId) {
         const employeeIds = assignments
-            .filter(a => a.TeamID === teamId)
-            .map(a => a.EmployeeID);
+            .filter(a => (a.TeamID || a.teamId || a.team_id) === teamId)
+            .map(a => a.EmployeeID || a.employeeId || a.employee_id);
 
-        return employees.filter(emp => employeeIds.includes(emp.EmployeeID));
+        return employees.filter(emp => employeeIds.includes(emp.EmployeeID || emp.id));
     }
 
     function getTeamMembersCount(teamId) {
-        return getTeamMembers(teamId).filter(m => m.active_flag).length;
+        return getTeamMembers(teamId).filter(m => m.active_flag || m.activeFlag).length;
     }
 
     function openTeamModal() {
@@ -104,8 +113,8 @@ export default function TeamInfo() {
     }
 
     function openEditModal(team) {
-        setEditTeamType(team.TeamType);
-        setEditTeamId(team.TeamID);
+        setEditTeamType(team.TeamType || team.teamType || team.team_type);
+        setEditTeamId(team.TeamID || team.id);
         setEditModalOpen(true);
         setSuccessMsg("");
         setError(null);
@@ -122,7 +131,7 @@ export default function TeamInfo() {
         setSuccessMsg("");
 
         try {
-            await addTeam({ TeamType: newTeamType });
+            await addTeam({ teamType: newTeamType });
             setSuccessMsg("Team added successfully!");
             setTeamModalOpen(false);
             await loadAllData(); // Refresh all data
@@ -142,7 +151,7 @@ export default function TeamInfo() {
         setSuccessMsg("");
 
         try {
-            await updateTeam(editTeamId, { TeamType: editTeamType });
+            await updateTeam(editTeamId, { teamType: editTeamType });
             setSuccessMsg("Team updated successfully!");
             setEditModalOpen(false);
             await loadAllData();
@@ -214,15 +223,17 @@ export default function TeamInfo() {
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {teams.map(team => {
-                            const memberCount = getTeamMembersCount(team.TeamID);
-                            const members = getTeamMembers(team.TeamID);
-                            const activeMembers = members.filter(m => m.active_flag);
+                            const teamId = team.TeamID || team.id;
+                            const teamType = team.TeamType || team.teamType || team.team_type;
+                            const memberCount = getTeamMembersCount(teamId);
+                            const members = getTeamMembers(teamId);
+                            const activeMembers = members.filter(m => m.active_flag || m.activeFlag);
 
                             return (
-                                <div key={team.TeamID} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
+                                <div key={teamId} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
                                     <div className="flex justify-between items-start mb-3">
                                         <div>
-                                            <h3 className="font-semibold text-gray-800">{team.TeamType}</h3>
+                                            <h3 className="font-semibold text-gray-800">{teamType}</h3>
                                             <p className="text-sm text-gray-500">
                                                 {memberCount} active member{memberCount !== 1 ? 's' : ''}
                                                 {members.length !== activeMembers.length && (
@@ -244,7 +255,7 @@ export default function TeamInfo() {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDeleteTeam(team.TeamID)}
+                                                onClick={() => handleDeleteTeam(teamId)}
                                                 className="text-red-600 hover:bg-red-50 p-1 rounded transition-colors duration-200"
                                                 title="Delete Team"
                                                 disabled={saving || members.length > 0}
@@ -260,19 +271,25 @@ export default function TeamInfo() {
                                         <div className="space-y-2">
                                             <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wider">Members:</h4>
                                             <div className="space-y-1">
-                                                {members.map(member => (
-                                                    <div key={member.EmployeeID} className="flex justify-between items-center text-sm">
-                                                        <span className={member.active_flag ? "text-gray-800" : "text-gray-400"}>
-                                                            {member.name}
-                                                        </span>
-                                                        <span className={`text-xs px-2 py-1 rounded ${member.active_flag
-                                                                ? "bg-green-100 text-green-700"
-                                                                : "bg-gray-100 text-gray-500"
-                                                            }`}>
-                                                            {member.role}
-                                                        </span>
-                                                    </div>
-                                                ))}
+                                                {members.map(member => {
+                                                    const memberId = member.EmployeeID || member.id;
+                                                    const memberActive = member.active_flag !== undefined ? member.active_flag : member.activeFlag;
+                                                    const memberRole = (typeof member.role === 'object' && member.role) ? member.role.name : member.role;
+
+                                                    return (
+                                                        <div key={memberId} className="flex justify-between items-center text-sm">
+                                                            <span className={memberActive ? "text-gray-800" : "text-gray-400"}>
+                                                                {member.name}
+                                                            </span>
+                                                            <span className={`text-xs px-2 py-1 rounded ${memberActive
+                                                                    ? "bg-green-100 text-green-700"
+                                                                    : "bg-gray-100 text-gray-500"
+                                                                }`}>
+                                                                {memberRole}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}

@@ -18,6 +18,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { employee, team, ...data } = req.body;
+    console.log('Assignment body:', req.body);
 
     // Convert relation fields to foreign keys
     const createData = { ...data };

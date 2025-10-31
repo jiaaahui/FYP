@@ -5,46 +5,64 @@ const prisma = require('../prismaClient');
 
 router.get('/', async (req, res) => {
   try {
-    const lorryTrips = await prisma.lorryTrip.findMany({
-      include: { truck: true }
+    const lorryTrips = await prisma.lorry_trips.findMany({
+      include: { trucks: true }
     });
     res.json(lorryTrips);
   } catch (err) {
     console.error('GET /api/lorry-trips error', err);
-    res.status(500).json({ error: 'Failed to fetch lorry trips' });
+    res.status(500).json({ error: 'Failed to fetch lorry trips', details: err.message });
   }
 });
 
 router.post('/', async (req, res) => {
   try {
-    const lorryTrip = await prisma.lorryTrip.create({ data: req.body });
+    const { truck, ...data } = req.body;
+    const createData = { ...data };
+    if (truck) createData.truck_id = truck;
+
+    const lorryTrip = await prisma.lorry_trips.create({
+      data: createData,
+      include: { trucks: true }
+    });
     res.status(201).json(lorryTrip);
   } catch (err) {
     console.error('POST /api/lorry-trips error', err);
-    res.status(500).json({ error: 'Failed to create lorry trip' });
+    res.status(500).json({ error: 'Failed to create lorry trip', details: err.message });
   }
 });
 
 router.put('/:id', async (req, res) => {
   try {
-    const lorryTrip = await prisma.lorryTrip.update({
+    const { truck, ...data } = req.body;
+    const updateData = { ...data };
+    if (truck) updateData.truck_id = truck;
+
+    const lorryTrip = await prisma.lorry_trips.update({
       where: { id: req.params.id },
-      data: req.body
+      data: updateData,
+      include: { trucks: true }
     });
     res.json(lorryTrip);
   } catch (err) {
     console.error('PUT /api/lorry-trips/:id error', err);
-    res.status(500).json({ error: 'Failed to update lorry trip' });
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Lorry trip not found' });
+    }
+    res.status(500).json({ error: 'Failed to update lorry trip', details: err.message });
   }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
-    await prisma.lorryTrip.delete({ where: { id: req.params.id } });
+    await prisma.lorry_trips.delete({ where: { id: req.params.id } });
     res.json({ message: 'Lorry trip deleted successfully' });
   } catch (err) {
     console.error('DELETE /api/lorry-trips/:id error', err);
-    res.status(500).json({ error: 'Failed to delete lorry trip' });
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Lorry trip not found' });
+    }
+    res.status(500).json({ error: 'Failed to delete lorry trip', details: err.message });
   }
 });
 

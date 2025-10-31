@@ -43,6 +43,29 @@ function Modal({ show, onClose, children }) {
     );
 }
 
+// Helper: normalize truck from API (snake_case) to component format (PascalCase)
+function normalizeTruck(truck) {
+    return {
+        id: truck.id,
+        CarPlate: truck.car_plate || truck.CarPlate,
+        Tone: truck.tone ?? truck.Tone,
+        LengthCM: truck.length_cm ?? truck.LengthCM,
+        WidthCM: truck.width_cm ?? truck.WidthCM,
+        HeightCM: truck.height_cm ?? truck.HeightCM
+    };
+}
+
+// Helper: convert component format (PascalCase) to API format (snake_case)
+function toApiFormat(truck) {
+    return {
+        car_plate: truck.CarPlate,
+        tone: truck.Tone,
+        length_cm: truck.LengthCM,
+        width_cm: truck.WidthCM,
+        height_cm: truck.HeightCM
+    };
+}
+
 export default function TruckInfo() {
     const [trucks, setTrucks] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
@@ -57,7 +80,14 @@ export default function TruckInfo() {
     useEffect(() => { refreshTrucks(); }, []);
     async function refreshTrucks() {
         setLoading(true);
-        try { setTrucks(await getAllTrucks()); } catch (e) { setError("Failed to fetch trucks: " + e.message); }
+        try {
+            const data = await getAllTrucks();
+            console.log('[TruckInfo] Trucks fetched:', { count: data?.length, sample: data?.[0] });
+            setTrucks(data.map(normalizeTruck));
+        } catch (e) {
+            console.error('[TruckInfo] Load error:', e);
+            setError("Failed to fetch trucks: " + e.message);
+        }
         setLoading(false);
     }
 
@@ -95,19 +125,19 @@ export default function TruckInfo() {
         e.preventDefault();
         setSaving(true); setError(null); setSuccessMsg("");
         try {
+            const apiData = toApiFormat(modalData);
             if (modalMode === "add") {
-                const newTruck = await addTruck(modalData);
-                setTrucks(prev => [...prev, newTruck]);
+                await addTruck(apiData);
+                await refreshTrucks();
                 setSuccessMsg("Truck added!");
             } else {
-                await updateTruck(modalData.TruckID || modalData.truck_id || modalData.id, modalData);
-                setTrucks(prev =>
-                    prev.map((b, idx) => (idx === editIdx ? { ...modalData } : b))
-                );
+                await updateTruck(modalData.id, apiData);
+                await refreshTrucks();
                 setSuccessMsg("Truck updated!");
             }
             setModalOpen(false);
         } catch (e) {
+            console.error('[TruckInfo] Save error:', e);
             setError(modalMode === "add"
                 ? "Failed to add truck: " + e.message
                 : "Failed to update: " + e.message
@@ -121,9 +151,10 @@ export default function TruckInfo() {
         setSaving(true); setError(null); setSuccessMsg("");
         try {
             await deleteTruck(id);
-            setTrucks(prev => prev.filter(t => (t.TruckID || t.truck_id || t.id) !== id));
+            setTrucks(prev => prev.filter(t => t.id !== id));
             setSuccessMsg("Truck deleted!");
         } catch (e) {
+            console.error('[TruckInfo] Delete error:', e);
             setError("Failed to delete: " + e.message);
         }
         setSaving(false);
@@ -205,7 +236,7 @@ export default function TruckInfo() {
                             </tr>
                         ) : (
                             trucks.map((item, idx) => (
-                                <tr key={item.TruckID || item.truck_id || item.id} className="hover:bg-gray-50">
+                                <tr key={item.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{idx + 1}</td>
                                     {TABLE_KEYS.map(k => (
                                         <td className="px-4 py-3 text-sm text-gray-900" key={k}>
@@ -225,7 +256,7 @@ export default function TruckInfo() {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(item.TruckID || item.truck_id || item.id)}
+                                                onClick={() => handleDelete(item.id)}
                                                 className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
                                                 title="Delete Truck"
                                                 disabled={saving}

@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../../firebase'; // Adjust path as needed
 import {
     getAllEmployees,
     addEmployee,
@@ -13,22 +11,22 @@ import {
 } from "../../../services/informationService";
 import { TeamBadge } from "./TeamInfo";
 
-const TABLE_KEYS = ["name", "role", "contact_number", "email", "team", "active_flag", "password"];
+const TABLE_KEYS = ["name", "role", "contactNumber", "email", "team", "activeFlag", "password"];
 
 const FIELD_LABELS = {
     name: "Name",
     role: "Role",
-    contact_number: "Contact Number",
+    contactNumber: "Contact Number",
     email: "Email",
     team: "Team",
-    active_flag: "Active Flag",
+    activeFlag: "Active Flag",
     password: "Password"
 };
 
 const FIELD_GUIDANCE = {
     name: "First letter uppercase, e.g. Lee Tian Le",
     role: "E.g. installer, admin, etc.",
-    contact_number: "Format: 01XXXXXXXX (no dashes/spaces)",
+    contactNumber: "Format: 01XXXXXXXX (no dashes/spaces)",
     team: "Select the team this employee belongs to",
     email: "Press Tab to accept suggested email or type your own",
     password: "Enter a secure password"
@@ -81,14 +79,6 @@ function ActiveFlagBadge({ value }) {
                 <span className="w-2 h-2 bg-red-500 rounded-full"></span> Inactive
             </span>
         );
-}
-
-function PendingBadge() {
-    return (
-        <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-medium gap-1 text-xs">
-            <span className="w-2 h-2 bg-yellow-500 rounded-full"></span> Pending
-        </span>
-    );
 }
 
 export default function EmployeeInfo() {
@@ -185,8 +175,8 @@ export default function EmployeeInfo() {
                     EmployeeID: empId,
                     name: emp.name,
                     email: emp.email,
-                    contact_number: emp.contact_number,
-                    active_flag: emp.active_flag,
+                    contactNumber: emp.contactNumber,
+                    activeFlag: emp.activeFlag,
                     role: roleId,
                     password: emp.password || '********',
                     team: empTeamMap.get(empId)?.TeamType || null,
@@ -219,7 +209,7 @@ export default function EmployeeInfo() {
             snapshot.forEach(doc => {
                 const userData = doc.data();
                 // Only include users with @gmail.com emails who aren't in employee database
-                if (userData.email && userData.email.endsWith('@gmail.com')) {
+                if (userData.email) {
                     users.push({
                         id: doc.id,
                         ...userData,
@@ -248,9 +238,9 @@ export default function EmployeeInfo() {
             name: "",
             email: "",
             role: rolesList[0]?.id || "",
-            contact_number: "",
+            contactNumber: "",
             team: "",
-            active_flag: true,
+            activeFlag: true,
             password: ""
         });
         setModalOpen(true);
@@ -284,7 +274,7 @@ export default function EmployeeInfo() {
         const { name, value } = e.target;
         let val = value;
 
-        if (name === "active_flag") {
+        if (name === "activeFlag") {
             val = value === "true";
         }
 
@@ -323,21 +313,20 @@ export default function EmployeeInfo() {
         setSaving(true);
         setError(null);
         setSuccessMsg("");
-
         try {
             const employeeData = {
                 name: modalData.name,
                 role: modalData.role,
                 email: modalData.email,
-                contact_number: modalData.contact_number,
-                active_flag: modalData.active_flag
+                contactNumber: modalData.contactNumber,
+                activeFlag: modalData.activeFlag
             };
 
             if (modalMode === "add") {
                 employeeData.password = modalData.password; // add password
+                console.log('!!!!!!!!!Added employee:', modalData);
                 const newEmp = await addEmployee(employeeData);
                 const newEmpId = newEmp.EmployeeID || newEmp.id;
-
                 if (modalData.team) {
                     await assignOrUpdateEmployeeTeam(newEmpId, modalData.team);
                 }
@@ -398,10 +387,10 @@ export default function EmployeeInfo() {
         // Required when adding (modalMode === 'add'); when editing, only required for fields you want to enforce
         const requiredWhenAdd = modalMode === "add" && k !== "team";
 
-        if (k === "active_flag") {
+        if (k === "activeFlag") {
             return (
                 <select
-                    name="active_flag"
+                    name="activeFlag"
                     value={val === true ? "true" : "false"}
                     onChange={onChange}
                     className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -462,7 +451,7 @@ export default function EmployeeInfo() {
             );
         }
 
-        if (k === "contact_number") {
+        if (k === "contactNumber") {
             return (
                 <input
                     name={k}
@@ -625,7 +614,7 @@ export default function EmployeeInfo() {
                                     </td>
                                     {TABLE_KEYS.map(k => (
                                         <td className="px-4 py-3 text-sm text-gray-900" key={k}>
-                                            {k === "active_flag" ? (
+                                            {k === "activeFlag" ? (
                                                 <ActiveFlagBadge value={emp[k]} />
                                             ) : k === "team" ? (
                                                 <TeamBadge teamType={emp[k]} />

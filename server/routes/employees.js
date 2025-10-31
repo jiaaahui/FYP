@@ -37,7 +37,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { role, ...data } = req.body;
-
+    console.log('Employee body:', req.body);
     // Convert role field to roleId for foreign key
     const createData = { ...data };
     if (role) {

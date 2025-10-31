@@ -67,6 +67,41 @@ function Modal({ show, onClose, children }) {
     );
 }
 
+// Helper: normalize product from API (snake_case) to component format (PascalCase)
+function normalizeProduct(product) {
+    return {
+        id: product.id,
+        ProductName: product.product_name || product.ProductName,
+        EstimatedInstallationTimeMin: product.estimated_installation_time_min ?? product.EstimatedInstallationTimeMin,
+        EstimatedInstallationTimeMax: product.estimated_installation_time_max ?? product.EstimatedInstallationTimeMax,
+        PackageLengthCM: product.package_length_cm ?? product.PackageLengthCM,
+        PackageWidthCM: product.package_width_cm ?? product.PackageWidthCM,
+        PackageHeightCM: product.package_height_cm ?? product.PackageHeightCM,
+        FragileFlag: product.fragile_flag ?? product.FragileFlag ?? false,
+        NoLieDownFlag: product.no_lie_down_flag ?? product.NoLieDownFlag ?? false,
+        InstallerTeamRequiredFlag: product.installer_team_required_flag ?? product.InstallerTeamRequiredFlag ?? false,
+        DismantleRequiredFlag: product.dismantle_required_flag ?? product.DismantleRequiredFlag ?? false,
+        DismantleExtraTime: product.dismantle_extra_time ?? product.DismantleExtraTime
+    };
+}
+
+// Helper: convert component format (PascalCase) to API format (snake_case)
+function toApiFormat(product) {
+    return {
+        product_name: product.ProductName,
+        estimated_installation_time_min: product.EstimatedInstallationTimeMin,
+        estimated_installation_time_max: product.EstimatedInstallationTimeMax,
+        package_length_cm: product.PackageLengthCM,
+        package_width_cm: product.PackageWidthCM,
+        package_height_cm: product.PackageHeightCM,
+        fragile_flag: product.FragileFlag,
+        no_lie_down_flag: product.NoLieDownFlag,
+        installer_team_required_flag: product.InstallerTeamRequiredFlag,
+        dismantle_required_flag: product.DismantleRequiredFlag,
+        dismantle_extra_time: product.DismantleExtraTime || null
+    };
+}
+
 export default function ProductInfo() {
     const [products, setProducts] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
@@ -81,7 +116,17 @@ export default function ProductInfo() {
     useEffect(() => { refreshProducts(); }, []);
     async function refreshProducts() {
         setLoading(true);
-        try { setProducts(await getAllProducts()); } catch (e) { setError("Failed to fetch products: " + e.message); }
+        try {
+            const data = await getAllProducts();
+            console.log('[ProductInfo] Products fetched:', {
+                count: data?.length,
+                sample: data?.[0]
+            });
+            setProducts(data.map(normalizeProduct));
+        } catch (e) {
+            console.error('[ProductInfo] Load error:', e);
+            setError("Failed to fetch products: " + e.message);
+        }
         setLoading(false);
     }
 
@@ -125,19 +170,19 @@ export default function ProductInfo() {
         e.preventDefault();
         setSaving(true); setError(null); setSuccessMsg("");
         try {
+            const apiData = toApiFormat(modalData);
             if (modalMode === "add") {
-                const newProduct = await addProduct(modalData);
-                setProducts(prev => [...prev, newProduct]);
+                const newProduct = await addProduct(apiData);
+                await refreshProducts(); // Refresh to get normalized data
                 setSuccessMsg("Product added!");
             } else {
-                await updateProduct(modalData.ProductID || modalData.product_id || modalData.id, modalData);
-                setProducts(prev =>
-                    prev.map((b, idx) => (idx === editIdx ? { ...modalData } : b))
-                );
+                await updateProduct(modalData.id, apiData);
+                await refreshProducts(); // Refresh to get normalized data
                 setSuccessMsg("Product updated!");
             }
             setModalOpen(false);
         } catch (e) {
+            console.error('[ProductInfo] Save error:', e);
             setError(modalMode === "add"
                 ? "Failed to add product: " + e.message
                 : "Failed to update: " + e.message
@@ -151,9 +196,10 @@ export default function ProductInfo() {
         setSaving(true); setError(null); setSuccessMsg("");
         try {
             await deleteProduct(id);
-            setProducts(prev => prev.filter(t => (t.ProductID || t.product_id || t.id) !== id));
+            setProducts(prev => prev.filter(t => t.id !== id));
             setSuccessMsg("Product deleted!");
         } catch (e) {
+            console.error('[ProductInfo] Delete error:', e);
             setError("Failed to delete: " + e.message);
         }
         setSaving(false);
@@ -232,7 +278,7 @@ export default function ProductInfo() {
                             </tr>
                         ) : (
                             products.map((item, idx) => (
-                                <tr key={item.ProductID || item.product_id || item.id} className="hover:bg-gray-50">
+                                <tr key={item.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{idx + 1}</td>
                                     {TABLE_KEYS.map(k => (
                                         <td className="px-4 py-3 text-sm text-gray-900" key={k}>
@@ -252,7 +298,7 @@ export default function ProductInfo() {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(item.ProductID || item.product_id || item.id)}
+                                                onClick={() => handleDelete(item.id)}
                                                 className="px-3 py-1 rounded-md text-red-600 hover:bg-red-50 transition-colors duration-200"
                                                 title="Delete Product"
                                                 disabled={saving}

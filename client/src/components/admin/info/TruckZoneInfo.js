@@ -11,6 +11,49 @@ import {
     deleteZone
 } from "../../../services/informationService";
 
+// Helper: normalize truck from API
+function normalizeTruck(truck) {
+    return {
+        id: truck.id,
+        TruckID: truck.id, // Keep TruckID for compatibility
+        CarPlate: truck.car_plate || truck.CarPlate,
+        Tone: truck.tone ?? truck.Tone,
+        LengthCM: truck.length_cm ?? truck.LengthCM,
+        WidthCM: truck.width_cm ?? truck.WidthCM,
+        HeightCM: truck.height_cm ?? truck.HeightCM
+    };
+}
+
+// Helper: normalize zone from API
+function normalizeZone(zone) {
+    return {
+        id: zone.id,
+        ZoneID: zone.id, // Keep ZoneID for compatibility
+        ZoneName: zone.zone_name || zone.zoneName || zone.ZoneName
+    };
+}
+
+// Helper: normalize truck zone from API
+function normalizeTruckZone(tz) {
+    return {
+        id: tz.id,
+        TruckID: tz.truck_id || tz.truckId || tz.TruckID,
+        ZoneID: tz.zone_id || tz.zoneId || tz.ZoneID,
+        IsPrimaryZone: tz.is_primary_zone ?? tz.isPrimaryZone ?? tz.IsPrimaryZone ?? false,
+        truck: tz.trucks || tz.truck,
+        zone: tz.zones || tz.zone
+    };
+}
+
+// Helper: convert truck zone to API format
+function toApiFormat(tz) {
+    return {
+        truck: tz.TruckID,
+        zone: tz.ZoneID,
+        is_primary_zone: tz.IsPrimaryZone
+    };
+}
+
 // Zone Management Component (CRUD in dropdown, no ZoneID display)
 function ZoneManager({ zones, onAddZone, onEditZone, onDeleteZone }) {
     const [showZoneManager, setShowZoneManager] = useState(false);
@@ -255,31 +298,33 @@ export default function TruckZoneInfo() {
     async function refreshAll() {
         setLoading(true);
         try {
-            setTrucks(await getAllTrucks());
-            setZones(await getAllZones());
-            setTruckZones(await getAllTruckZone());
+            const trucksData = await getAllTrucks();
+            const zonesData = await getAllZones();
+            const truckZonesData = await getAllTruckZone();
+            console.log('[TruckZoneInfo] Data fetched:', {
+                trucks: { count: trucksData?.length, sample: trucksData?.[0] },
+                zones: { count: zonesData?.length, sample: zonesData?.[0] },
+                truckZones: { count: truckZonesData?.length, sample: truckZonesData?.[0] }
+            });
+            setTrucks(trucksData.map(normalizeTruck));
+            setZones(zonesData.map(normalizeZone));
+            setTruckZones(truckZonesData.map(normalizeTruckZone));
         } catch (e) {
+            console.error('[TruckZoneInfo] Load error:', e);
             setError("Failed to fetch data: " + e.message);
         }
         setLoading(false);
     }
 
-    // Zone CRUD operations (all update firebase and state)
+    // Zone CRUD operations
     async function handleAddZone(zoneName) {
         setSaving(true);
         try {
-            // Generate next ZoneID
-            const ids = zones.map(z => z.ZoneID);
-            let max = 0;
-            ids.forEach(id => {
-                const n = parseInt(id.replace("ZON_", ""), 10);
-                if (!isNaN(n) && n > max) max = n;
-            });
-            const nextId = "ZON_" + String(max + 1).padStart(5, "0");
-            const newZone = await addZone({ ZoneID: nextId, ZoneName: zoneName });
-            setZones(prev => [...prev, newZone]);
+            await addZone({ zone_name: zoneName });
+            await refreshAll();
             setSuccessMsg("Zone added!");
         } catch (e) {
+            console.error('[TruckZoneInfo] Add zone error:', e);
             setError("Failed to add zone: " + e.message);
         }
         setSaving(false);
@@ -287,10 +332,11 @@ export default function TruckZoneInfo() {
     async function handleEditZone(zoneId, zoneName) {
         setSaving(true);
         try {
-            await updateZone(zoneId, { ZoneID: zoneId, ZoneName: zoneName });
-            setZones(prev => prev.map(z => z.ZoneID === zoneId ? { ...z, ZoneName: zoneName } : z));
+            await updateZone(zoneId, { zone_name: zoneName });
+            await refreshAll();
             setSuccessMsg("Zone updated!");
         } catch (e) {
+            console.error('[TruckZoneInfo] Edit zone error:', e);
             setError("Failed to update zone: " + e.message);
         }
         setSaving(false);
@@ -299,27 +345,30 @@ export default function TruckZoneInfo() {
         setSaving(true);
         try {
             await deleteZone(zoneId);
-            setZones(prev => prev.filter(z => z.ZoneID !== zoneId));
+            setZones(prev => prev.filter(z => z.id !== zoneId));
             setTruckZones(prev => prev.filter(tz => tz.ZoneID !== zoneId));
             setSuccessMsg("Zone deleted!");
         } catch (e) {
+            console.error('[TruckZoneInfo] Delete zone error:', e);
             setError("Failed to delete zone: " + e.message);
         }
         setSaving(false);
     }
 
-    // Truck Zone operations (all update firebase and state)
+    // Truck Zone operations
     async function handleAssignZone(truckId, zoneId, isPrimary) {
         setSaving(true);
         try {
-            const newAssignment = await addTruckZone({
+            const apiData = toApiFormat({
                 TruckID: truckId,
                 ZoneID: zoneId,
                 IsPrimaryZone: isPrimary
             });
-            setTruckZones(prev => [...prev, newAssignment]);
+            await addTruckZone(apiData);
+            await refreshAll();
             setSuccessMsg("Zone assigned to truck!");
         } catch (e) {
+            console.error('[TruckZoneInfo] Assign zone error:', e);
             setError("Failed to assign zone: " + e.message);
         }
         setSaving(false);
@@ -328,15 +377,16 @@ export default function TruckZoneInfo() {
     async function handleRemoveZone(truckId, zoneId) {
         setSaving(true);
         try {
-            const [tz] = truckZones.filter(tz => tz.TruckID === truckId && tz.ZoneID === zoneId);
+            const tz = truckZones.find(tz => tz.TruckID === truckId && tz.ZoneID === zoneId);
             if (tz) {
-                await deleteTruckZone(tz.id || tz.TruckZoneID);
+                await deleteTruckZone(tz.id);
                 setTruckZones(prev => prev.filter(tz2 =>
                     !(tz2.TruckID === truckId && tz2.ZoneID === zoneId)
                 ));
+                setSuccessMsg("Zone removed from truck!");
             }
-            setSuccessMsg("Zone removed from truck!");
         } catch (e) {
+            console.error('[TruckZoneInfo] Remove zone error:', e);
             setError("Failed to remove zone: " + e.message);
         }
         setSaving(false);
@@ -347,17 +397,13 @@ export default function TruckZoneInfo() {
         try {
             const tz = truckZones.find(tz => tz.TruckID === truckId && tz.ZoneID === zoneId);
             if (tz) {
-                await updateTruckZone(tz.id || tz.TruckZoneID, { ...tz, IsPrimaryZone: isPrimary });
-                setTruckZones(prev =>
-                    prev.map(tz2 =>
-                        tz2.TruckID === truckId && tz2.ZoneID === zoneId
-                            ? { ...tz2, IsPrimaryZone: isPrimary }
-                            : tz2
-                    )
-                );
+                const apiData = toApiFormat({ ...tz, IsPrimaryZone: isPrimary });
+                await updateTruckZone(tz.id, apiData);
+                await refreshAll();
                 setSuccessMsg("Primary zone updated!");
             }
         } catch (e) {
+            console.error('[TruckZoneInfo] Set primary error:', e);
             setError("Failed to set primary zone: " + e.message);
         }
         setSaving(false);
