@@ -47,7 +47,7 @@ function Modal({ show, onClose, children }) {
 function normalizeTruck(truck) {
     return {
         id: truck.id,
-        CarPlate: truck.car_plate || truck.CarPlate,
+        CarPlate: truck.plate_no,
         Tone: truck.tone ?? truck.Tone,
         LengthCM: truck.length_cm ?? truck.LengthCM,
         WidthCM: truck.width_cm ?? truck.WidthCM,
@@ -55,10 +55,10 @@ function normalizeTruck(truck) {
     };
 }
 
-// Helper: convert component format (PascalCase) to API format (snake_case)
+// // Helper: convert component format (PascalCase) to API format (snake_case)
 function toApiFormat(truck) {
     return {
-        car_plate: truck.CarPlate,
+        plate_no: truck.CarPlate,
         tone: truck.Tone,
         length_cm: truck.LengthCM,
         width_cm: truck.WidthCM,

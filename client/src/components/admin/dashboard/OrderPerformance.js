@@ -21,19 +21,25 @@ export default function OrderPerformance() {
     getAllBuildings().then(setBuildings).catch(err => console.warn(err));
   }, []);
 
+  const getCustomerId = (order) => order.customer_id ?? order.CustomerID ?? order.customerId;
+  const getBuildingId = (order) => order.building_id ?? order.BuildingID ?? order.buildingId;
+  const getOrderId = (order) => order.id ?? order.OrderID ?? order.orderId;
+  const getOrderStatus = (order) => order.order_status ?? order.OrderStatus ?? order.status ?? '';
+  const getNumberOfAttempts = (order) => Number(order.number_of_attempts ?? order.NumberOfAttempts ?? order.attempts ?? 1);
+
   const getCustomerName = (customerId) => {
-    const customer = customers.find(c => c.CustomerID === customerId || c.id === customerId);
-    return customer?.FullName || customer?.name || customerId;
+    const customer = customers.find(c => (c.id || c.CustomerID || c.customerId) === customerId);
+    return customer?.full_name || customer?.FullName || customer?.name || customerId;
   };
   const getBuildingName = (buildingId) => {
-    const building = buildings.find(b => b.building_id === buildingId || b.BuildingID === buildingId || b.id === buildingId);
-    return building?.BuildingName || building?.name || buildingId;
+    const building = buildings.find(b => (b.id || b.BuildingID || b.building_id) === buildingId);
+    return building?.building_name || building?.BuildingName || building?.name || buildingId;
   };
 
   // Robust getOrderDate: returns Date object or null if no valid date found.
   const getOrderDate = (order) => {
     if (!order) return null;
-    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    const tryFields = ['actual_arrival_date_time', 'ActualArrivalDateTime', 'actual_end_date_time', 'created_at', 'createdAt', 'CreatedAt'];
     for (const f of tryFields) {
       const v = order[f];
       if (!v) continue;
@@ -78,11 +84,11 @@ export default function OrderPerformance() {
 
   // Metrics for selected month
   const totalOrdersThisMonth = filteredOrdersForMonth.length;
-  const completedOrdersThisMonth = filteredOrdersForMonth.filter(order => (order.OrderStatus ?? order.status) === 'Completed').length;
-  const pendingOrdersThisMonth = filteredOrdersForMonth.filter(order => (order.OrderStatus ?? order.status) === 'Pending').length;
+  const completedOrdersThisMonth = filteredOrdersForMonth.filter(order => getOrderStatus(order) === 'Completed').length;
+  const pendingOrdersThisMonth = filteredOrdersForMonth.filter(order => getOrderStatus(order) === 'Pending').length;
 
   const avgAttemptsThisMonth = filteredOrdersForMonth.length > 0
-    ? (filteredOrdersForMonth.reduce((sum, o) => sum + (Number(o.NumberOfAttempts) || 1), 0) / filteredOrdersForMonth.length)
+    ? (filteredOrdersForMonth.reduce((sum, o) => sum + getNumberOfAttempts(o), 0) / filteredOrdersForMonth.length)
     : 0;
 
   const successRateThisMonth = filteredOrdersForMonth.length > 0
@@ -180,29 +186,32 @@ export default function OrderPerformance() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredOrdersForMonth.map((order) => (
-              <tr key={order.OrderID || order.id}>
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{order.OrderID || order.id}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(order.CustomerID)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{getBuildingName(order.BuildingID)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  <div className="flex items-center">
-                    <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                    {getOrderRating(order) ?? 'N/A'}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{order.NumberOfAttempts ?? 1}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    (order.OrderStatus ?? order.status) === 'Completed' ? 'bg-green-100 text-green-800'
-                      : (order.OrderStatus ?? order.status) === 'Pending' ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {order.OrderStatus ?? order.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {filteredOrdersForMonth.map((order) => {
+              const rating = getOrderRating(order);
+              return (
+                <tr key={getOrderId(order)}>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{getOrderId(order)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(getCustomerId(order))}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getBuildingName(getBuildingId(order))}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    <div className="flex items-center">
+                      <Star className="h-4 w-4 text-yellow-400 mr-1" />
+                      {rating !== null ? rating.toFixed(1) : 'N/A'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getNumberOfAttempts(order)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      getOrderStatus(order) === 'Completed' ? 'bg-green-100 text-green-800'
+                        : getOrderStatus(order) === 'Pending' ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {getOrderStatus(order)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
             {filteredOrdersForMonth.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-gray-500">No orders for selected month.</td>

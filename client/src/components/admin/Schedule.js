@@ -77,25 +77,68 @@ export default function Schedule() {
         loadAll();
     }, []);
 
+    // --- Field accessor helpers (support both snake_case and PascalCase) ---
+    const field = {
+        slotId: (slot) => slot.id || slot.TimeSlotID,
+        slotDate: (slot) => slot.date || slot.Date,
+        slotStart: (slot) => slot.time_window_start || slot.TimeWindowStart,
+        slotEnd: (slot) => slot.time_window_end || slot.TimeWindowEnd,
+        slotAvailable: (slot) => slot.available_flag ?? slot.AvailableFlag ?? true,
+        slotTripId: (slot) => slot.lorry_trip_id || slot.LorryTripID,
+        truckId: (truck) => truck.id || truck.truck_id || truck.TruckID,
+        truckPlate: (truck) => truck.plate_no || truck.CarPlate || '',
+        truckTone: (truck) => truck.tone || truck.Tone || '',
+        truckLength: (truck) => truck.length_cm || truck.LengthCM || '',
+        truckWidth: (truck) => truck.width_cm || truck.WidthCM || '',
+        truckHeight: (truck) => truck.height_cm || truck.HeightCM || '',
+        teamId: (team) => team.id || team.TeamID,
+        teamType: (team) => team.team_type || team.TeamType || '',
+        tripId: (trip) => trip.id || trip.LorryTripID,
+        tripTruckId: (trip) => trip.truck_id || trip.TruckID,
+        tripDeliveryTeamId: (trip) => trip.delivery_team_id || trip.DeliveryTeamID,
+        tripWarehouseTeamId: (trip) => trip.warehouse_team_id || trip.WarehouseTeamID,
+        orderId: (order) => order.id || order.OrderID,
+        orderCustomerId: (order) => order.customer_id || order.CustomerID,
+        orderBuildingId: (order) => order.building_id || order.BuildingID,
+        orderTimeSlotId: (order) => order.time_slot_id || order.TimeSlotID,
+        orderStatus: (order) => order.order_status || order.OrderStatus || '',
+        orderProductOrderId: (op) => op.order_id || op.OrderID,
+        orderProductProductId: (op) => op.product_id || op.ProductID,
+        orderProductQuantity: (op) => op.quantity || op.Quantity || 1,
+        customerId: (cust) => cust.id || cust.CustomerID,
+        customerName: (cust) => cust.full_name || cust.FullName || '',
+        buildingId: (bld) => bld.id || bld.building_id || bld.BuildingID,
+        buildingName: (bld) => bld.building_name || bld.BuildingName || '',
+        productId: (prod) => prod.id || prod.product_id || prod.ProductID,
+        productName: (prod) => prod.product_name || prod.ProductName || '',
+        productInstallerRequired: (prod) => prod.installer_team_required_flag ?? prod.InstallerTeamRequiredFlag ?? false,
+        productInstallMin: (prod) => prod.estimated_installation_time_min || prod.EstimatedInstallationTimeMin || 0,
+        productInstallMax: (prod) => prod.estimated_installation_time_max || prod.EstimatedInstallationTimeMax || 0,
+        employeeId: (emp) => emp.id || emp.EmployeeID,
+        employeeName: (emp) => emp.name || emp.displayName || '',
+        assignmentEmployeeId: (ea) => ea.employeeId || ea.EmployeeID,
+        assignmentTeamId: (ea) => ea.teamId || ea.TeamID
+    };
+
     // --- Data enrichment helpers ---
     function getTruck(truckId) {
-        return trucks.find(t => t.truck_id === truckId || t.TruckID === truckId);
+        return trucks.find(t => field.truckId(t) === truckId);
     }
     function getTeam(teamId) {
-        return teams.find(t => t.TeamID === teamId);
+        return teams.find(t => field.teamId(t) === teamId);
     }
     function getOrdersForSlot(timeSlotId) {
-        return orders.filter(o => o.TimeSlotID === timeSlotId);
+        return orders.filter(o => field.orderTimeSlotId(o) === timeSlotId);
     }
     function getOrderProductsForOrder(orderId) {
-        return orderProducts.filter(op => op.OrderID === orderId);
+        return orderProducts.filter(op => field.orderProductOrderId(op) === orderId);
     }
     function getEmployeesForTeam(teamId) {
-        const assigned = employeeAssignments.filter(ea => ea.TeamID === teamId);
-        return employees.filter(e => assigned.some(a => a.EmployeeID === e.EmployeeID));
+        const assigned = employeeAssignments.filter(ea => field.assignmentTeamId(ea) === teamId);
+        return employees.filter(e => assigned.some(a => field.assignmentEmployeeId(a) === field.employeeId(e)));
     }
     function getLorryTrip(tripId) {
-        return lorryTrips.find(t => t.LorryTripID === tripId);
+        return lorryTrips.find(t => field.tripId(t) === tripId);
     }
 
     // --- Calendar logic ---
@@ -117,14 +160,14 @@ export default function Schedule() {
 
     const getTimeSlotsForDate = (date) => {
         const dateStr = formatDate(date);
-        return timeSlots.filter(slot => slot.Date === dateStr);
+        return timeSlots.filter(slot => field.slotDate(slot) === dateStr);
     };
 
     // --- CRUD Handlers ---
     const handleEditTimeSlot = (slot) => {
         setAddOrEdit('edit');
         // Deep clone, add slot.lorryTrip for easier editing
-        const lorryTrip = getLorryTrip(slot.LorryTripID) || {};
+        const lorryTrip = getLorryTrip(field.slotTripId(slot)) || {};
         setEditingTimeSlot({
             ...slot,
             lorryTrip: { ...lorryTrip }
@@ -134,18 +177,24 @@ export default function Schedule() {
 
     const handleDeleteTimeSlot = async (slot) => {
         if (!window.confirm('Delete this time slot?')) return;
-        await deleteTimeSlot(slot.TimeSlotID);
-        setTimeSlots(prev => prev.filter(s => s.TimeSlotID !== slot.TimeSlotID));
+        const slotId = field.slotId(slot);
+        await deleteTimeSlot(slotId);
+        setTimeSlots(prev => prev.filter(s => field.slotId(s) !== slotId));
     };
 
     // --- Add TimeSlot Modal ---
     const handleAddTimeSlot = () => {
         setAddOrEdit('add');
         setEditingTimeSlot({
+            date: formatDate(selectedDate),
             Date: formatDate(selectedDate),
+            time_window_start: '',
             TimeWindowStart: '',
+            time_window_end: '',
             TimeWindowEnd: '',
+            available_flag: true,
             AvailableFlag: true,
+            lorry_trip_id: '',
             LorryTripID: '',
             lorryTrip: {}
         });

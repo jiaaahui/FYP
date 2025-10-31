@@ -81,24 +81,33 @@ function normalizeProduct(product) {
         NoLieDownFlag: product.no_lie_down_flag ?? product.NoLieDownFlag ?? false,
         InstallerTeamRequiredFlag: product.installer_team_required_flag ?? product.InstallerTeamRequiredFlag ?? false,
         DismantleRequiredFlag: product.dismantle_required_flag ?? product.DismantleRequiredFlag ?? false,
-        DismantleExtraTime: product.dismantle_extra_time ?? product.DismantleExtraTime
+        DismantleExtraTime: product.dismantle_time ?? product.DismantleTime
     };
 }
 
 // Helper: convert component format (PascalCase) to API format (snake_case)
 function toApiFormat(product) {
+    const toIntOrNull = (v) => {
+        if (v === undefined || v === null || v === "") return null;
+        // Accept numbers or numeric strings; parse and return integer
+        const n = Number(v);
+        if (Number.isNaN(n)) return null;
+        // If your DB expects integer, use Math.floor or parseInt; here parseInt keeps whole
+        return Number.isInteger(n) ? n : Math.round(n);
+    };
+
     return {
         product_name: product.ProductName,
-        estimated_installation_time_min: product.EstimatedInstallationTimeMin,
-        estimated_installation_time_max: product.EstimatedInstallationTimeMax,
-        package_length_cm: product.PackageLengthCM,
-        package_width_cm: product.PackageWidthCM,
-        package_height_cm: product.PackageHeightCM,
+        estimated_installation_time_min: toIntOrNull(product.EstimatedInstallationTimeMin),
+        estimated_installation_time_max: toIntOrNull(product.EstimatedInstallationTimeMax),
+        package_length_cm: toIntOrNull(product.PackageLengthCM),
+        package_width_cm: toIntOrNull(product.PackageWidthCM),
+        package_height_cm: toIntOrNull(product.PackageHeightCM),
         fragile_flag: product.FragileFlag,
         no_lie_down_flag: product.NoLieDownFlag,
         installer_team_required_flag: product.InstallerTeamRequiredFlag,
         dismantle_required_flag: product.DismantleRequiredFlag,
-        dismantle_extra_time: product.DismantleExtraTime || null
+        dismantle_time: product.DismantleTime || null
     };
 }
 
@@ -173,6 +182,7 @@ export default function ProductInfo() {
             const apiData = toApiFormat(modalData);
             if (modalMode === "add") {
                 const newProduct = await addProduct(apiData);
+                console.log('[ProductInfo] Product added:', newProduct);
                 await refreshProducts(); // Refresh to get normalized data
                 setSuccessMsg("Product added!");
             } else {
@@ -223,7 +233,7 @@ export default function ProductInfo() {
                 value={val ?? ""}
                 onChange={onChange}
                 className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                type={typeof val === "number" || k.includes("Time") || k.includes("CM") ? "number" : "text"}
+                type={typeof val === "number" || k.includes("Time") || k.includes("time") || k.includes("CM") ? "number" : "text"}
                 required={isEdit}
             />
         );

@@ -8,54 +8,61 @@ import {
 } from "../../../services/informationService";
 
 const FIELD_GUIDANCE = {
-    BuildingName: "E.g. KL Trillion",
-    HousingType: "E.g. Condominium, Apartment, etc.",
-    PostalCode: "E.g. 51481",
-    ZoneID: "Select the zone this building belongs to",
-    AccessTimeWindowStart: "E.g. 09:00",
-    AccessTimeWindowEnd: "E.g. 17:00",
-    LiftAvailable: "Is lift available?",
-    LoadingBayAvailable: "Is loading bay available?",
-    VehicleSizeLimit: "E.g. 3T, 1T",
-    PreRegistrationRequired: "Pre-registration needed for access?",
-    SpecialEquipmentNeeded: "Comma-separated list if any. E.g. Trolley, Ladder",
-    Notes: "Additional notes (optional)"
+    building_name: "E.g. KL Trillion",
+    housing_type: "E.g. Condominium, Apartment, etc.",
+    postal_code: "E.g. 51481",
+    zone_id: "Select the zone this building belongs to",
+    access_time_window_start: "E.g. 09:00",
+    access_time_window_end: "E.g. 17:00",
+    lift_available: "Is lift available?",
+    lift_dimensions: "E.g. 200cm x 150cm x 220cm",
+    loading_bay_available: "Is loading bay available?",
+    vehicle_size_limit: "E.g. 3T, 1T",
+    vehicle_length_limit: "E.g. 5m",
+    vehicle_width_limit: "E.g. 2.5m",
+    pre_registration_required: "Pre-registration needed for access?",
+    special_equipment_needed: "Comma-separated list if any. E.g. Trolley, Ladder",
+    parking_distance: "E.g. 50m from loading bay",
+    narrow_doorways: "Does it have narrow doorways?",
+    notes: "Additional notes (optional)"
 };
-
-const TABLE_KEYS = [
-    "BuildingName",
-    "ZoneID",
-    "HousingType",
-    "PostalCode",
-    "AccessTimeWindowStart",
-    "AccessTimeWindowEnd",
-    "LiftAvailable",
-    "LoadingBayAvailable",
-    "VehicleSizeLimit",
-    "PreRegistrationRequired",
-    "SpecialEquipmentNeeded",
-    "Notes"
-];
 
 const FIELD_LABELS = {
-    BuildingName: "Building Name",
-    ZoneID: "Zone",
-    HousingType: "Housing Type",
-    PostalCode: "Postal Code",
-    AccessTimeWindowStart: "Access Start",
-    AccessTimeWindowEnd: "Access End",
-    LiftAvailable: "Lift",
-    LoadingBayAvailable: "Loading Bay",
-    VehicleSizeLimit: "Vehicle Size Limit",
-    PreRegistrationRequired: "Pre-Reg",
-    SpecialEquipmentNeeded: "Special Equipment",
-    Notes: "Notes"
+    building_name: "Building Name",
+    zone_id: "Zone",
+    housing_type: "Housing Type",
+    postal_code: "Postal Code",
+    access_time_window_start: "Access Start",
+    access_time_window_end: "Access End",
+    lift_available: "Lift",
+    lift_dimensions: "Lift Dimensions",
+    loading_bay_available: "Loading Bay",
+    vehicle_size_limit: "Vehicle Size Limit",
+    vehicle_length_limit: "Vehicle Length Limit",
+    vehicle_width_limit: "Vehicle Width Limit",
+    pre_registration_required: "Pre-Registration Required",
+    special_equipment_needed: "Special Equipment",
+    parking_distance: "Parking Distance",
+    narrow_doorways: "Narrow Doorways",
+    notes: "Notes"
 };
 
+// Required fields
+const REQUIRED_FIELDS = ["building_name", "zone_id", "housing_type", "postal_code"];
+
+// Table columns
+const TABLE_KEYS = Object.keys(FIELD_LABELS);
+
 function BoolBadge({ value }) {
-    return value
-        ? (<span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium gap-1 text-xs">Yes</span>)
-        : (<span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 font-medium gap-1 text-xs">No</span>);
+    return value ? (
+        <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium gap-1 text-xs">
+            Yes
+        </span>
+    ) : (
+        <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 font-medium gap-1 text-xs">
+            No
+        </span>
+    );
 }
 
 function Modal({ show, onClose, children }) {
@@ -63,59 +70,17 @@ function Modal({ show, onClose, children }) {
     return (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-40">
             <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl relative max-h-[90vh] overflow-y-auto" tabIndex={-1}>
-                <button onClick={onClose} className="absolute top-2 right-3 text-gray-400 hover:text-black text-lg" aria-label="Close">&times;</button>
+                <button
+                    onClick={onClose}
+                    className="absolute top-2 right-3 text-gray-400 hover:text-black text-lg"
+                    aria-label="Close"
+                >
+                    &times;
+                </button>
                 {children}
             </div>
         </div>
     );
-}
-
-// Helper: normalize building from API (snake_case) to component format (PascalCase)
-function normalizeBuilding(building) {
-    return {
-        id: building.id,
-        BuildingName: building.building_name || building.buildingName || building.BuildingName,
-        HousingType: building.housing_type || building.housingType || building.HousingType,
-        SpecialEquipmentNeeded: building.special_equipment_needed || building.specialEquipmentNeeded || building.SpecialEquipmentNeeded,
-        VehicleSizeLimit: building.vehicle_size_limit || building.vehicleSizeLimit || building.VehicleSizeLimit,
-        VehicleLengthLimit: building.vehicle_length_limit || building.vehicleLengthLimit || building.VehicleLengthLimit,
-        VehicleWidthLimit: building.vehicle_width_limit || building.vehicleWidthLimit || building.VehicleWidthLimit,
-        PostalCode: building.postal_code || building.postalCode || building.PostalCode,
-        LoadingBayAvailable: building.loading_bay_available ?? building.loadingBayAvailable ?? building.LoadingBayAvailable ?? false,
-        AccessTimeWindowStart: building.access_time_window_start || building.accessTimeWindowStart || building.AccessTimeWindowStart,
-        AccessTimeWindowEnd: building.access_time_window_end || building.accessTimeWindowEnd || building.AccessTimeWindowEnd,
-        PreRegistrationRequired: building.pre_registration_required ?? building.preRegistrationRequired ?? building.PreRegistrationRequired ?? false,
-        ZoneID: building.zone_id || building.zoneId || building.ZoneID,
-        LiftAvailable: building.lift_available ?? building.liftAvailable ?? building.LiftAvailable ?? false,
-        LiftDimensions: building.lift_dimensions || building.liftDimensions || building.LiftDimensions,
-        Notes: building.notes || building.Notes,
-        ParkingDistance: building.parking_distance || building.parkingDistance || building.ParkingDistance,
-        NarrowDoorways: building.narrow_doorways ?? building.narrowDoorways ?? building.NarrowDoorways ?? false,
-        zone: building.zone // Keep the relation object if present
-    };
-}
-
-// Helper: convert component format (PascalCase) to API format (snake_case)
-function toApiFormat(building) {
-    return {
-        building_name: building.BuildingName,
-        housing_type: building.HousingType,
-        special_equipment_needed: building.SpecialEquipmentNeeded || null,
-        vehicle_size_limit: building.VehicleSizeLimit || null,
-        vehicle_length_limit: building.VehicleLengthLimit || null,
-        vehicle_width_limit: building.VehicleWidthLimit || null,
-        postal_code: building.PostalCode,
-        loading_bay_available: building.LoadingBayAvailable,
-        access_time_window_start: building.AccessTimeWindowStart || null,
-        access_time_window_end: building.AccessTimeWindowEnd || null,
-        pre_registration_required: building.PreRegistrationRequired,
-        zone: building.ZoneID || null, // API expects 'zone' field that will be converted to zoneId on backend
-        lift_available: building.LiftAvailable,
-        lift_dimensions: building.LiftDimensions || null,
-        notes: building.Notes || null,
-        parking_distance: building.ParkingDistance || null,
-        narrow_doorways: building.NarrowDoorways
-    };
 }
 
 export default function BuildingInfo() {
@@ -123,7 +88,7 @@ export default function BuildingInfo() {
     const [zones, setZones] = useState([]);
     const [zoneMap, setZoneMap] = useState({});
     const [modalOpen, setModalOpen] = useState(false);
-    const [modalMode, setModalMode] = useState("add"); // "add" or "edit"
+    const [modalMode, setModalMode] = useState("add");
     const [modalData, setModalData] = useState({});
     const [editIdx, setEditIdx] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -135,17 +100,12 @@ export default function BuildingInfo() {
         async function loadZones() {
             try {
                 const z = await getAllZones();
-                console.log('[BuildingInfo] Zones fetched:', { count: z?.length, sample: z?.[0] });
-                setZones(z);
                 const map = {};
-                z.forEach(zn => {
-                    const zoneId = zn.id;
-                    const zoneName = zn.zone_name || zn.ZoneName || zn.name || zn.id;
-                    map[zoneId] = zoneName;
-                });
+                z.forEach(zn => (map[zn.id] = zn.zone_name || zn.name || zn.id));
+                setZones(z);
                 setZoneMap(map);
             } catch (e) {
-                console.error('[BuildingInfo] Load zones error:', e);
+                console.error("Load zones error:", e);
                 setError("Failed to fetch zones: " + e.message);
             }
         }
@@ -153,14 +113,14 @@ export default function BuildingInfo() {
     }, []);
 
     useEffect(() => { refreshBuildings(); }, []);
+
     async function refreshBuildings() {
         setLoading(true);
         try {
             const data = await getAllBuildings();
-            console.log('[BuildingInfo] Buildings fetched:', { count: data?.length, sample: data?.[0] });
-            setBuildings(data.map(normalizeBuilding));
+            setBuildings(data);
         } catch (e) {
-            console.error('[BuildingInfo] Load error:', e);
+            console.error("Load buildings error:", e);
             setError("Failed to fetch buildings: " + e.message);
         }
         setLoading(false);
@@ -169,21 +129,29 @@ export default function BuildingInfo() {
     function openAddModal() {
         setModalMode("add");
         setModalData({
-            BuildingName: "",
-            ZoneID: "",
-            HousingType: "",
-            PostalCode: "",
-            AccessTimeWindowStart: "",
-            AccessTimeWindowEnd: "",
-            LiftAvailable: false,
-            LoadingBayAvailable: false,
-            VehicleSizeLimit: "",
-            PreRegistrationRequired: false,
-            SpecialEquipmentNeeded: "",
-            Notes: ""
+            building_name: "",
+            zone_id: "",
+            housing_type: "",
+            postal_code: "",
+            access_time_window_start: "",
+            access_time_window_end: "",
+            lift_available: false,
+            loading_bay_available: false,
+            vehicle_size_limit: "",
+            vehicle_length_limit: "",
+            vehicle_width_limit: "",
+            pre_registration_required: false,
+            special_equipment_needed: "",
+            parking_distance: "",
+            narrow_doorways: false,
+            lift_dimensions: "",
+            notes: ""
+            // created_at and updated_at will be handled by database
         });
         setModalOpen(true);
-        setSuccessMsg(""); setError(null); setEditIdx(null);
+        setSuccessMsg("");
+        setError(null);
+        setEditIdx(null);
     }
 
     function openEditModal(idx) {
@@ -191,35 +159,38 @@ export default function BuildingInfo() {
         setEditIdx(idx);
         setModalData({ ...buildings[idx] });
         setModalOpen(true);
-        setSuccessMsg(""); setError(null);
+        setSuccessMsg("");
+        setError(null);
     }
 
     function handleModalChange(e) {
-        const { name, value, type } = e.target;
-        let val = value;
-        if (type === "checkbox") {
-            val = e.target.checked;
-        }
-        setModalData(prev => ({ ...prev, [name]: val }));
+        const { name, value, type, checked } = e.target;
+        setModalData(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
     }
 
     async function handleModalSubmit(e) {
         e.preventDefault();
-        setSaving(true); setError(null); setSuccessMsg("");
+        setSaving(true);
+        setError(null);
+        setSuccessMsg("");
         try {
-            const apiData = toApiFormat(modalData);
             if (modalMode === "add") {
-                await addBuilding(apiData);
-                await refreshBuildings();
+                // For new buildings, database will set created_at and updated_at
+                await addBuilding(modalData);
                 setSuccessMsg("Building added!");
             } else {
-                await updateBuilding(modalData.id, apiData);
-                await refreshBuildings();
+                // For updates, set updated_at to current time
+                const updateData = {
+                    ...modalData,
+                    updated_at: new Date().toISOString()
+                };
+                await updateBuilding(updateData.id, updateData);
                 setSuccessMsg("Building updated!");
             }
+            await refreshBuildings();
             setModalOpen(false);
         } catch (e) {
-            console.error('[BuildingInfo] Save error:', e);
+            console.error("Save error:", e);
             setError(modalMode === "add"
                 ? "Failed to add building: " + e.message
                 : "Failed to update: " + e.message
@@ -230,26 +201,34 @@ export default function BuildingInfo() {
 
     async function handleDelete(id) {
         if (!window.confirm("Delete this building?")) return;
-        setSaving(true); setError(null); setSuccessMsg("");
+        setSaving(true);
         try {
             await deleteBuilding(id);
             setBuildings(prev => prev.filter(b => b.id !== id));
             setSuccessMsg("Building deleted!");
         } catch (e) {
-            console.error('[BuildingInfo] Delete error:', e);
+            console.error("Delete error:", e);
             setError("Failed to delete: " + e.message);
         }
         setSaving(false);
     }
 
     function renderInputField(k, val, onChange, isEdit) {
-        if (k === "ZoneID") {
+        const isRequired = REQUIRED_FIELDS.includes(k);
+
+        if (k === "zone_id") {
             return (
-                <select name="ZoneID" value={val ?? ""} onChange={onChange} className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                <select
+                    name="zone_id"
+                    value={val ?? ""}
+                    onChange={onChange}
+                    className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required={isRequired}
+                >
                     <option value="">Select a zone</option>
                     {zones.map(z => (
                         <option key={z.id} value={z.id}>
-                            {z.zone_name || z.ZoneName || z.name || z.id}
+                            {z.zone_name || z.name || z.id}
                         </option>
                     ))}
                 </select>
@@ -257,16 +236,10 @@ export default function BuildingInfo() {
         }
         if (typeof val === "boolean") {
             return (
-                <input
-                    type="checkbox"
-                    name={k}
-                    checked={!!val}
-                    onChange={onChange}
-                    className="h-5 w-5 text-green-600"
-                />
+                <input type="checkbox" name={k} checked={!!val} onChange={onChange} className="h-5 w-5 text-green-600" />
             );
         }
-        if (k === "Notes" || k === "SpecialEquipmentNeeded") {
+        if (k === "notes" || k === "special_equipment_needed" || k === "lift_dimensions") {
             return (
                 <textarea
                     name={k}
@@ -274,6 +247,7 @@ export default function BuildingInfo() {
                     onChange={onChange}
                     className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows={2}
+                    required={isRequired}
                 />
             );
         }
@@ -283,14 +257,19 @@ export default function BuildingInfo() {
                 value={val ?? ""}
                 onChange={onChange}
                 className="border border-gray-300 p-2 rounded-md w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required={isEdit}
+                required={isRequired}
             />
         );
     }
-    function renderTableCell(k, val, row) {
-        if (k === "ZoneID") return <span className="text-xs">{zoneMap[val] || val || "-"}</span>;
+
+    function renderTableCell(k, val) {
+        if (k === "zone_id") {
+            // Display zone name from zoneMap, fallback to ID if name not found
+            const zoneName = zoneMap[val];
+            return <span className="text-xs">{zoneName || val || "-"}</span>;
+        }
         if (typeof val === "boolean") return <BoolBadge value={val} />;
-        if (k === "Notes" && !val) return <span className="text-xs">-</span>;
+        if (k === "notes" && !val) return <span className="text-xs">-</span>;
         return <span className="text-xs">{val ?? "-"}</span>;
     }
 
@@ -305,8 +284,10 @@ export default function BuildingInfo() {
                     + Add Building
                 </button>
             </div>
+
             {successMsg && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">{successMsg}</div>}
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
+
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -314,7 +295,7 @@ export default function BuildingInfo() {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                             {TABLE_KEYS.map(k => (
                                 <th key={k} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {FIELD_LABELS[k] || k}
+                                    {FIELD_LABELS[k]}
                                 </th>
                             ))}
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -342,7 +323,7 @@ export default function BuildingInfo() {
                                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{idx + 1}</td>
                                     {TABLE_KEYS.map(k => (
                                         <td className="px-4 py-3 text-sm text-gray-900" key={k}>
-                                            {renderTableCell(k, item[k], item)}
+                                            {renderTableCell(k, item[k])}
                                         </td>
                                     ))}
                                     <td className="px-4 py-3 text-sm">
@@ -375,6 +356,7 @@ export default function BuildingInfo() {
                     </tbody>
                 </table>
             </div>
+
             {/* Add/Edit Modal */}
             <Modal show={modalOpen} onClose={() => setModalOpen(false)}>
                 <h3 className="text-xl font-semibold mb-4">
@@ -383,9 +365,16 @@ export default function BuildingInfo() {
                 <form onSubmit={handleModalSubmit} className="space-y-3">
                     {TABLE_KEYS.map(k => (
                         <div key={k}>
-                            <label className="block font-medium mb-1 text-sm">{FIELD_LABELS[k] || k}</label>
+                            <label className="block font-medium mb-1 text-sm">
+                                {FIELD_LABELS[k]}
+                                {REQUIRED_FIELDS.includes(k) && (
+                                    <span className="text-red-500 ml-1" title="Required field">★</span>
+                                )}
+                            </label>
                             {renderInputField(k, modalData[k], handleModalChange, modalMode === "edit")}
-                            {FIELD_GUIDANCE[k] && (<div className="text-xs text-gray-400 mt-1">{FIELD_GUIDANCE[k]}</div>)}
+                            {FIELD_GUIDANCE[k] && (
+                                <div className="text-xs text-gray-400 mt-1">{FIELD_GUIDANCE[k]}</div>
+                            )}
                         </div>
                     ))}
                     <div className="flex gap-3 pt-2">
@@ -395,8 +384,8 @@ export default function BuildingInfo() {
                             disabled={saving}
                         >
                             {saving
-                                ? (modalMode === "add" ? "Adding..." : "Saving...")
-                                : (modalMode === "add" ? "Add Building" : "Save Changes")}
+                                ? modalMode === "add" ? "Adding..." : "Saving..."
+                                : modalMode === "add" ? "Add Building" : "Save Changes"}
                         </button>
                         <button
                             type="button"

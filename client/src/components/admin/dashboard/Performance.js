@@ -1,9 +1,16 @@
+/**
+ * NOTE: This file contains hardcoded sample data and appears to be a template/demo.
+ * The actual dashboard implementation with real API data is in Overview.js, EmployeePerformance.js, and OrderPerformance.js.
+ * This file may be unused and could be removed or updated to fetch real data from the API if needed.
+ */
+
 import React, { useState } from 'react';
 import { Users, Truck, Package, MapPin, Clock, Star, AlertCircle, CheckCircle, Calendar, TrendingUp } from 'lucide-react';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
 
+  // HARDCODED DATA - This should be replaced with API calls if this component is used
   // Data from the database
   const employees = [
     { id: 'EMP_00015', name: 'Tester 6', active: true, contact: '0123455571', role: 'installer' },

@@ -86,7 +86,6 @@ export default function EmployeeInfo() {
     const [teams, setTeams] = useState([]);
     const [employeeTeamMap, setEmployeeTeamMap] = useState(new Map());
     const [enrichedEmployees, setEnrichedEmployees] = useState([]);
-    const [pendingUsers, setPendingUsers] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState("add");
     const [modalData, setModalData] = useState({});
@@ -114,11 +113,10 @@ export default function EmployeeInfo() {
         setLoading(true);
         try {
             // Load roles using the informationService helper `getRoles`
-            const [employeesData, teamsData, assignmentsData, pendingData, rolesData] = await Promise.all([
+            const [employeesData, teamsData, assignmentsData, rolesData] = await Promise.all([
                 getAllEmployees(),
                 getAllTeams(),
                 getAllEmployeeTeamAssignments(),
-                loadPendingUsers(),
                 getRoles()
             ]);
 
@@ -191,47 +189,12 @@ export default function EmployeeInfo() {
             setTeams(teamsData || []);
             setEmployeeTeamMap(empTeamMap);
             setEnrichedEmployees(enriched);
-            setPendingUsers(pendingData || []);
         } catch (e) {
             setError("Failed to load data: " + (e?.message || e));
             console.error('[EmployeeInfo] Load error:', e);
         }
         setLoading(false);
     }
-
-    // Load pending users from Firebase Auth users collection
-    async function loadPendingUsers() {
-        try {
-            const usersRef = collection(db, 'users');
-            const snapshot = await getDocs(usersRef);
-            const users = [];
-
-            snapshot.forEach(doc => {
-                const userData = doc.data();
-                // Only include users with @gmail.com emails who aren't in employee database
-                if (userData.email) {
-                    users.push({
-                        id: doc.id,
-                        ...userData,
-                        uid: doc.id
-                    });
-                }
-            });
-
-            // Filter out users who are already employees
-            const employeeEmails = new Set();
-            const allEmployees = await getAllEmployees();
-            allEmployees.forEach(emp => {
-                if (emp.email) employeeEmails.add(emp.email.toLowerCase());
-            });
-
-            return users.filter(user => !employeeEmails.has(user.email.toLowerCase()));
-        } catch (error) {
-            console.error("Error loading pending users:", error);
-            return [];
-        }
-    }
-
     function openAddModal() {
         setModalMode("add");
         setModalData({

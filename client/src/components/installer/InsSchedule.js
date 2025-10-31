@@ -1,184 +1,126 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, Package, Wrench, AlertTriangle, CheckCircle, Phone, Mail } from 'lucide-react';
+import {
+    getAllOrders,
+    getAllOrderProducts,
+    getAllProducts,
+    getAllCustomers,
+    getAllBuildings,
+    getAllEmployees,
+    getAllTeams
+} from '../../services/informationService';
 
 const InstallationSchedule = () => {
-  const [selectedDate, setSelectedDate] = useState('2025-08-28');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [selectedTeam, setSelectedTeam] = useState('all');
 
-  // Dummy data following your exact attribute structure
-  const installationOrders = [
-    {
-      OrderID: 'ORD_00025',
-      CustomerID: 'yM7cootDpZPe2mW1ang023bIZGB2',
-      BuildingID: 'tYsjcUMtShV360EFuylO',
-      ProductID: 'PRD_00006',
-      TimeSlotID: 'TSL_00006',
-      DeliveryTeamID: 'TEM_00005',
-      EmployeeID: 'EMP_00018',
-      OrderStatus: 'Scheduled',
-      ScheduledStartDateTime: new Date('2025-08-28T09:00:00'),
-      ScheduledEndDateTime: new Date('2025-08-28T10:30:00'),
-      ActualStartDateTime: null,
-      ActualEndDateTime: null,
-      NumberOfAttempts: 0,
-      CustomerRating: null,
-      CustomerFeedback: null,
-      ProofOfDeliveryURL: null,
-      DelayReason: null,
-      CreatedAt: new Date('2025-08-25T10:00:00'),
-      UpdatedAt: new Date('2025-08-25T10:00:00')
-    },
-    {
-      OrderID: 'ORD_00026',
-      CustomerID: 'euEi7hwmGQM6LnajgTn62KQdfpv2',
-      BuildingID: 'BLD_00008',
-      ProductID: 'PRD_00006',
-      TimeSlotID: 'TSL_00007',
-      DeliveryTeamID: 'TEM_00005',
-      EmployeeID: 'EMP_00018',
-      OrderStatus: 'In Progress',
-      ScheduledStartDateTime: new Date('2025-08-28T14:00:00'),
-      ScheduledEndDateTime: new Date('2025-08-28T15:30:00'),
-      ActualStartDateTime: new Date('2025-08-28T14:15:00'),
-      ActualEndDateTime: null,
-      NumberOfAttempts: 1,
-      CustomerRating: null,
-      CustomerFeedback: null,
-      ProofOfDeliveryURL: null,
-      DelayReason: 'Traffic jam',
-      CreatedAt: new Date('2025-08-26T11:30:00'),
-      UpdatedAt: new Date('2025-08-28T14:15:00')
-    },
-    {
-      OrderID: 'ORD_00027',
-      CustomerID: 'yM7cootDpZPe2mW1ang023bIZGB2',
-      BuildingID: 'tYsjcUMtShV360EFuylO',
-      ProductID: 'PRD_00006',
-      TimeSlotID: 'TSL_00008',
-      DeliveryTeamID: 'TEM_00006',
-      EmployeeID: 'EMP_00020',
-      OrderStatus: 'Completed',
-      ScheduledStartDateTime: new Date('2025-08-27T16:00:00'),
-      ScheduledEndDateTime: new Date('2025-08-27T17:30:00'),
-      ActualStartDateTime: new Date('2025-08-27T16:05:00'),
-      ActualEndDateTime: new Date('2025-08-27T17:20:00'),
-      NumberOfAttempts: 1,
-      CustomerRating: 4.8,
-      CustomerFeedback: 'Great installation service!',
-      ProofOfDeliveryURL: 'https://dummy.pod/ORD_00027.jpg',
-      DelayReason: null,
-      CreatedAt: new Date('2025-08-24T09:00:00'),
-      UpdatedAt: new Date('2025-08-27T17:20:00')
-    }
-  ];
+  // Data state
+  const [orders, setOrders] = useState([]);
+  const [orderProducts, setOrderProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const customers = {
-    'yM7cootDpZPe2mW1ang023bIZGB2': {
-      CustomerID: 'yM7cootDpZPe2mW1ang023bIZGB2',
-      name: 'Howard Wong',
-      email: 'wongwenhao19@gmail.com',
-      phone: '0138505210',
-      address: 'Tiara Damansara Jalan 17/1',
-      city: 'Petaling Jaya',
-      postcode: '50600',
-      state: 'Kuala Lumpur',
-      notificationsEnabled: true
-    },
-    'euEi7hwmGQM6LnajgTn62KQdfpv2': {
-      CustomerID: 'euEi7hwmGQM6LnajgTn62KQdfpv2',
-      name: 'Jia Hui Chew',
-      email: 'chewjh0707@gmail.com',
-      phone: '+60123456789',
-      address: 'OUG Parklane Condominium',
-      city: 'Kuala Lumpur',
-      postcode: '54069',
-      state: 'Kuala Lumpur',
-      notificationsEnabled: true
-    }
-  };
+  // Load all data
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [
+          ordersData,
+          orderProductsData,
+          productsData,
+          customersData,
+          buildingsData,
+          employeesData,
+          teamsData
+        ] = await Promise.all([
+          getAllOrders(),
+          getAllOrderProducts(),
+          getAllProducts(),
+          getAllCustomers(),
+          getAllBuildings(),
+          getAllEmployees(),
+          getAllTeams()
+        ]);
 
-  const buildings = {
-    'tYsjcUMtShV360EFuylO': {
-      BuildingID: 'tYsjcUMtShV360EFuylO',
-      BuildingName: 'Tiara Damansara',
-      HousingType: 'condominium',
-      PostalCode: '50600',
-      ZoneID: 'ZON_00006',
-      LoadingBayAvailable: false,
-      LiftAvailable: false,
-      StairsAvailable: true,
-      NarrowDoorways: true,
-      AccessTimeWindowStart: '10:00',
-      AccessTimeWindowEnd: '17:00',
-      PreRegistrationRequired: true,
-      ParkingDistance: '100',
-      VehicleLengthLimit: '6.0',
-      VehicleWidthLimit: '3.0',
-      SpecialEquipmentNeeded: ['Trolley with rubber wheels', 'Hard hat & shoes'],
-      Notes: ''
-    },
-    'BLD_00008': {
-      BuildingID: 'BLD_00008',
-      BuildingName: 'OUG Parklane',
-      HousingType: 'Condominium',
-      PostalCode: '54069',
-      ZoneID: 'ZON_00009',
-      LoadingBayAvailable: true,
-      LiftAvailable: true,
-      AccessTimeWindowStart: '09:00',
-      AccessTimeWindowEnd: '17:00',
-      PreRegistrationRequired: true,
-      VehicleSizeLimit: '1T',
-      SpecialEquipmentNeeded: '',
-      Notes: ''
+        setOrders(ordersData);
+        setOrderProducts(orderProductsData);
+        setProducts(productsData);
+        setCustomers(customersData);
+        setBuildings(buildingsData);
+        setEmployees(employeesData);
+        setTeams(teamsData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
     }
-  };
+    loadData();
+  }, []);
 
-  const products = {
-    'PRD_00006': {
-      ProductID: 'PRD_00006',
-      ProductName: 'DAIKIN Air Conditioner',
-      PackageLengthCM: 115,
-      PackageWidthCM: 83,
-      PackageHeightCM: 43,
-      EstimatedInstallationTimeMin: 60,
-      EstimatedInstallationTimeMax: 90,
-      InstallerTeamRequiredFlag: true,
-      DismantleRequiredFlag: false,
-      DismantleExtraTime: 10,
-      NoLieDownFlag: false,
-      FragileFlag: false
-    }
-  };
-
-  const employees = {
-    'EMP_00018': {
-      EmployeeID: 'EMP_00018',
-      name: 'Terry Chong',
-      email: 'tbmstaff@tbm.com',
-      contact_number: '0125478965',
-      role: 'delivery team',
-      active_flag: true
-    },
-    'EMP_00020': {
-      EmployeeID: 'EMP_00020',
-      name: 'Ahmad Rahman',
-      email: 'ahmad@tbm.com',
-      contact_number: '0126547891',
-      role: 'installation team',
-      active_flag: true
-    }
-  };
-
-  const teams = {
-    'TEM_00005': {
-      TeamID: 'TEM_00005',
-      TeamType: 'Installation Team A'
-    },
-    'TEM_00006': {
-      TeamID: 'TEM_00006',
-      TeamType: 'Installation Team B'
-    }
+  // Field accessor helpers
+  const field = {
+    orderId: (order) => order.id || order.OrderID,
+    orderCustomerId: (order) => order.customer_id || order.CustomerID,
+    orderBuildingId: (order) => order.building_id || order.BuildingID,
+    orderEmployeeId: (order) => order.employee_id || order.EmployeeID,
+    orderTimeSlotId: (order) => order.time_slot_id || order.TimeSlotID,
+    orderStatus: (order) => order.order_status || order.OrderStatus || 'Pending',
+    orderScheduledStart: (order) => order.scheduled_start_date_time || order.ScheduledStartDateTime,
+    orderScheduledEnd: (order) => order.scheduled_end_date_time || order.ScheduledEndDateTime,
+    orderActualStart: (order) => order.actual_start_date_time || order.ActualStartDateTime,
+    orderActualEnd: (order) => order.actual_end_date_time || order.ActualEndDateTime,
+    orderAttempts: (order) => order.number_of_attempts || order.NumberOfAttempts || 0,
+    orderRating: (order) => order.customer_rating || order.CustomerRating,
+    orderFeedback: (order) => order.customer_feedback || order.CustomerFeedback || '',
+    orderDelayReason: (order) => order.delay_reason || order.DelayReason || '',
+    customerId: (cust) => cust.id || cust.CustomerID,
+    customerName: (cust) => cust.full_name || cust.FullName || cust.name || '',
+    customerEmail: (cust) => cust.email,
+    customerPhone: (cust) => cust.phone || cust.contact_number,
+    customerAddress: (cust) => cust.address,
+    customerCity: (cust) => cust.city,
+    customerPostcode: (cust) => cust.postcode || cust.postal_code,
+    customerState: (cust) => cust.state,
+    buildingId: (bld) => bld.id || bld.building_id || bld.BuildingID,
+    buildingName: (bld) => bld.building_name || bld.BuildingName || '',
+    buildingType: (bld) => bld.housing_type || bld.HousingType || '',
+    buildingPostcode: (bld) => bld.postal_code || bld.PostalCode || '',
+    buildingLoadingBay: (bld) => bld.loading_bay_available ?? bld.LoadingBayAvailable ?? false,
+    buildingLift: (bld) => bld.lift_available ?? bld.LiftAvailable ?? false,
+    buildingAccessStart: (bld) => bld.access_time_window_start || bld.AccessTimeWindowStart || '',
+    buildingAccessEnd: (bld) => bld.access_time_window_end || bld.AccessTimeWindowEnd || '',
+    buildingPreReg: (bld) => bld.pre_registration_required ?? bld.PreRegistrationRequired ?? false,
+    buildingSpecialEquip: (bld) => bld.special_equipment_needed || bld.SpecialEquipmentNeeded || '',
+    buildingNarrowDoors: (bld) => bld.narrow_doorways ?? bld.NarrowDoorways ?? false,
+    buildingNotes: (bld) => bld.notes || bld.Notes || '',
+    productId: (prod) => prod.id || prod.product_id || prod.ProductID,
+    productName: (prod) => prod.product_name || prod.ProductName || '',
+    productLength: (prod) => prod.package_length_cm || prod.PackageLengthCM || 0,
+    productWidth: (prod) => prod.package_width_cm || prod.PackageWidthCM || 0,
+    productHeight: (prod) => prod.package_height_cm || prod.PackageHeightCM || 0,
+    productInstallMin: (prod) => prod.estimated_installation_time_min || prod.EstimatedInstallationTimeMin || 0,
+    productInstallMax: (prod) => prod.estimated_installation_time_max || prod.EstimatedInstallationTimeMax || 0,
+    productInstallerRequired: (prod) => prod.installer_team_required_flag ?? prod.InstallerTeamRequiredFlag ?? false,
+    productFragile: (prod) => prod.fragile_flag ?? prod.FragileFlag ?? false,
+    productNoLieDown: (prod) => prod.no_lie_down_flag ?? prod.NoLieDownFlag ?? false,
+    orderProductOrderId: (op) => op.order_id || op.OrderID,
+    orderProductProductId: (op) => op.product_id || op.ProductID,
+    orderProductQuantity: (op) => op.quantity || op.Quantity || 1,
+    employeeId: (emp) => emp.id || emp.EmployeeID,
+    employeeName: (emp) => emp.name || emp.displayName || '',
+    employeeEmail: (emp) => emp.email,
+    employeeContact: (emp) => emp.contactNumber || emp.contact_number || '',
+    employeeRole: (emp) => emp.role?.name || emp.roleName || emp.role || '',
+    teamId: (team) => team.id || team.TeamID,
+    teamType: (team) => team.team_type || team.TeamType || ''
   };
 
   const getStatusColor = (status) => {
@@ -211,32 +153,73 @@ const InstallationSchedule = () => {
     }
   };
 
+  // Get installation orders (orders that have products requiring installer team)
+  const installationOrders = orders.filter(order => {
+    const orderProds = orderProducts.filter(op => field.orderProductOrderId(op) === field.orderId(order));
+    return orderProds.some(op => {
+      const product = products.find(p => field.productId(p) === field.orderProductProductId(op));
+      return product && field.productInstallerRequired(product);
+    });
+  });
+
+  // Filter orders by date and team
   const filteredOrders = installationOrders.filter(order => {
-    const orderDate = order.ScheduledStartDateTime.toDateString();
-    const filterDate = new Date(selectedDate).toDateString();
-    const teamMatch = selectedTeam === 'all' || order.DeliveryTeamID === selectedTeam;
-    return orderDate === filterDate && teamMatch;
+    const scheduledStart = field.orderScheduledStart(order);
+    if (!scheduledStart) return false;
+
+    const orderDate = new Date(scheduledStart).toISOString().split('T')[0];
+    const filterDate = selectedDate;
+    const dateMatch = orderDate === filterDate;
+
+    // For team filter, we'd need to check delivery_team_id if that field exists on orders
+    // For now, just match date
+    return dateMatch;
   });
 
   const formatTime = (dateTime) => {
-    return dateTime ? dateTime.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true
-    }) : 'Not started';
+    if (!dateTime) return 'Not started';
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return 'Invalid time';
+    }
   };
 
   const formatDate = (dateTime) => {
-    return dateTime ? dateTime.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    }) : '';
+    if (!dateTime) return '';
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return '';
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading installation schedule...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">Installation Schedule</h1>
+
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -257,8 +240,11 @@ const InstallationSchedule = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Teams</option>
-                <option value="TEM_00005">Installation Team A</option>
-                <option value="TEM_00006">Installation Team B</option>
+                {teams.map(team => (
+                  <option key={field.teamId(team)} value={field.teamId(team)}>
+                    {field.teamType(team)}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -274,29 +260,37 @@ const InstallationSchedule = () => {
             </div>
           ) : (
             filteredOrders.map(order => {
-              const customer = customers[order.CustomerID];
-              const building = buildings[order.BuildingID];
-              const product = products[order.ProductID];
-              const employee = employees[order.EmployeeID];
-              const team = teams[order.DeliveryTeamID];
+              const customer = customers.find(c => field.customerId(c) === field.orderCustomerId(order));
+              const building = buildings.find(b => field.buildingId(b) === field.orderBuildingId(order));
+              const employee = employees.find(e => field.employeeId(e) === field.orderEmployeeId(order));
+
+              // Get products for this order
+              const orderProds = orderProducts.filter(op => field.orderProductOrderId(op) === field.orderId(order));
+              const orderProductsDetails = orderProds.map(op => {
+                const product = products.find(p => field.productId(p) === field.orderProductProductId(op));
+                return {
+                  ...op,
+                  product
+                };
+              }).filter(op => op.product && field.productInstallerRequired(op.product));
 
               return (
-                <div key={order.OrderID} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
+                <div key={field.orderId(order)} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
                   {/* Header */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <h3 className="text-xl font-semibold text-gray-900">{order.OrderID}</h3>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium border flex items-center space-x-1 ${getStatusColor(order.OrderStatus)}`}>
-                        {getStatusIcon(order.OrderStatus)}
-                        <span>{order.OrderStatus}</span>
+                      <h3 className="text-xl font-semibold text-gray-900">{field.orderId(order)}</h3>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium border flex items-center space-x-1 ${getStatusColor(field.orderStatus(order))}`}>
+                        {getStatusIcon(field.orderStatus(order))}
+                        <span>{field.orderStatus(order)}</span>
                       </span>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-gray-600">Attempt #{order.NumberOfAttempts || 1}</p>
-                      {order.CustomerRating && (
+                      <p className="text-sm text-gray-600">Attempt #{field.orderAttempts(order) || 1}</p>
+                      {field.orderRating(order) && (
                         <div className="flex items-center justify-end mt-1">
                           <span className="text-yellow-400">★</span>
-                          <span className="text-sm font-medium ml-1">{order.CustomerRating}</span>
+                          <span className="text-sm font-medium ml-1">{field.orderRating(order)}</span>
                         </div>
                       )}
                     </div>
@@ -314,20 +308,22 @@ const InstallationSchedule = () => {
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <p className="text-gray-600">Scheduled</p>
-                            <p className="font-medium">{formatTime(order.ScheduledStartDateTime)} - {formatTime(order.ScheduledEndDateTime)}</p>
+                            <p className="font-medium">
+                              {formatTime(field.orderScheduledStart(order))} - {formatTime(field.orderScheduledEnd(order))}
+                            </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Actual</p>
                             <p className="font-medium">
-                              {order.ActualStartDateTime ? formatTime(order.ActualStartDateTime) : 'Not started'} - 
-                              {order.ActualEndDateTime ? formatTime(order.ActualEndDateTime) : 'Ongoing'}
+                              {field.orderActualStart(order) ? formatTime(field.orderActualStart(order)) : 'Not started'} -
+                              {field.orderActualEnd(order) ? formatTime(field.orderActualEnd(order)) : 'Ongoing'}
                             </p>
                           </div>
                         </div>
-                        {order.DelayReason && (
+                        {field.orderDelayReason(order) && (
                           <div className="mt-3 p-2 bg-yellow-100 rounded text-sm">
                             <span className="font-medium text-yellow-800">Delay Reason: </span>
-                            <span className="text-yellow-700">{order.DelayReason}</span>
+                            <span className="text-yellow-700">{field.orderDelayReason(order)}</span>
                           </div>
                         )}
                       </div>
@@ -338,40 +334,46 @@ const InstallationSchedule = () => {
                           <User className="w-4 h-4 mr-2 text-blue-600" />
                           Customer
                         </h4>
-                        <div className="space-y-2 text-sm">
-                          <p className="font-medium">{customer?.name}</p>
-                          <div className="flex items-center space-x-2">
-                            <Phone className="w-3 h-3 text-gray-400" />
-                            <span>{customer?.phone}</span>
+                        {customer ? (
+                          <div className="space-y-2 text-sm">
+                            <p className="font-medium">{field.customerName(customer)}</p>
+                            <div className="flex items-center space-x-2">
+                              <Phone className="w-3 h-3 text-gray-400" />
+                              <span>{field.customerPhone(customer)}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Mail className="w-3 h-3 text-gray-400" />
+                              <span>{field.customerEmail(customer)}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Mail className="w-3 h-3 text-gray-400" />
-                            <span>{customer?.email}</span>
-                          </div>
-                        </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">Customer information not available</p>
+                        )}
                       </div>
 
                       {/* Team & Employee */}
-                      <div className="border rounded-lg p-4">
-                        <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                          <User className="w-4 h-4 mr-2 text-blue-600" />
-                          Assignment
-                        </h4>
-                        <div className="space-y-2 text-sm">
-                          <div>
-                            <span className="text-gray-600">Team: </span>
-                            <span className="font-medium">{team?.TeamType}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Technician: </span>
-                            <span className="font-medium">{employee?.name}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Contact: </span>
-                            <span>{employee?.contact_number}</span>
+                      {employee && (
+                        <div className="border rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                            <User className="w-4 h-4 mr-2 text-blue-600" />
+                            Assignment
+                          </h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-gray-600">Technician: </span>
+                              <span className="font-medium">{field.employeeName(employee)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Contact: </span>
+                              <span>{field.employeeContact(employee)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Role: </span>
+                              <span>{field.employeeRole(employee)}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Right Column */}
@@ -380,90 +382,103 @@ const InstallationSchedule = () => {
                       <div className="border rounded-lg p-4">
                         <h4 className="font-medium text-gray-900 mb-3 flex items-center">
                           <Package className="w-4 h-4 mr-2 text-blue-600" />
-                          Product
+                          Products ({orderProductsDetails.length})
                         </h4>
-                        <div className="space-y-2 text-sm">
-                          <p className="font-medium text-blue-600">{product?.ProductName}</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-gray-600">Dimensions: </span>
-                              <span>{product?.PackageLengthCM} × {product?.PackageWidthCM} × {product?.PackageHeightCM} cm</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Install Time: </span>
-                              <span>{product?.EstimatedInstallationTimeMin}-{product?.EstimatedInstallationTimeMax} min</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            {product?.InstallerTeamRequiredFlag && (
-                              <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs">Installer Required</span>
-                            )}
-                            {product?.FragileFlag && (
-                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">Fragile</span>
-                            )}
-                            {product?.NoLieDownFlag && (
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">Keep Upright</span>
-                            )}
-                          </div>
+                        <div className="space-y-3">
+                          {orderProductsDetails.map((op, idx) => {
+                            const product = op.product;
+                            return (
+                              <div key={idx} className="border-b last:border-b-0 pb-3 last:pb-0">
+                                <div className="space-y-2 text-sm">
+                                  <p className="font-medium text-blue-600">
+                                    {field.orderProductQuantity(op)}x {field.productName(product)}
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                      <span className="text-gray-600">Dimensions: </span>
+                                      <span>{field.productLength(product)} × {field.productWidth(product)} × {field.productHeight(product)} cm</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-gray-600">Install Time: </span>
+                                      <span>{field.productInstallMin(product)}-{field.productInstallMax(product)} min</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2 flex-wrap gap-1">
+                                    {field.productInstallerRequired(product) && (
+                                      <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs">Installer Required</span>
+                                    )}
+                                    {field.productFragile(product) && (
+                                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">Fragile</span>
+                                    )}
+                                    {field.productNoLieDown(product) && (
+                                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">Keep Upright</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
                       {/* Location Information */}
-                      <div className="border rounded-lg p-4">
-                        <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                          <MapPin className="w-4 h-4 mr-2 text-blue-600" />
-                          Location
-                        </h4>
-                        <div className="space-y-2 text-sm">
-                          <p className="font-medium">{building?.BuildingName}</p>
-                          <p>{customer?.address}</p>
-                          <p>{customer?.city}, {customer?.state} {building?.PostalCode}</p>
-                          
-                          <div className="mt-3 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-600">Access Hours:</span>
-                              <span>{building?.AccessTimeWindowStart} - {building?.AccessTimeWindowEnd}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-600">Loading Bay:</span>
-                              <span className={building?.LoadingBayAvailable ? 'text-green-600' : 'text-red-600'}>
-                                {building?.LoadingBayAvailable ? 'Available' : 'Not Available'}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-600">Lift Access:</span>
-                              <span className={building?.LiftAvailable ? 'text-green-600' : 'text-red-600'}>
-                                {building?.LiftAvailable ? 'Available' : 'Not Available'}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {building?.SpecialEquipmentNeeded && building.SpecialEquipmentNeeded.length > 0 && (
-                            <div className="mt-3 p-2 bg-yellow-50 rounded">
-                              <p className="font-medium text-yellow-800 mb-1">Special Equipment Required:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {building.SpecialEquipmentNeeded.map((equipment, index) => (
-                                  <span key={index} className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs">
-                                    {equipment}
-                                  </span>
-                                ))}
+                      {building && customer && (
+                        <div className="border rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                            <MapPin className="w-4 h-4 mr-2 text-blue-600" />
+                            Location
+                          </h4>
+                          <div className="space-y-2 text-sm">
+                            <p className="font-medium">{field.buildingName(building)}</p>
+                            <p>{field.customerAddress(customer)}</p>
+                            <p>{field.customerCity(customer)}, {field.customerState(customer)} {field.buildingPostcode(building)}</p>
+
+                            <div className="mt-3 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">Access Hours:</span>
+                                <span>{field.buildingAccessStart(building)} - {field.buildingAccessEnd(building)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">Loading Bay:</span>
+                                <span className={field.buildingLoadingBay(building) ? 'text-green-600' : 'text-red-600'}>
+                                  {field.buildingLoadingBay(building) ? 'Available' : 'Not Available'}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600">Lift Access:</span>
+                                <span className={field.buildingLift(building) ? 'text-green-600' : 'text-red-600'}>
+                                  {field.buildingLift(building) ? 'Available' : 'Not Available'}
+                                </span>
                               </div>
                             </div>
-                          )}
-                          
-                          {building?.NarrowDoorways && (
-                            <div className="mt-2 p-2 bg-orange-50 rounded">
-                              <p className="text-orange-700 text-xs font-medium">⚠️ Narrow doorways - Take precaution</p>
-                            </div>
-                          )}
+
+                            {field.buildingSpecialEquip(building) && (
+                              <div className="mt-3 p-2 bg-yellow-50 rounded">
+                                <p className="font-medium text-yellow-800 mb-1 text-xs">Special Equipment Required:</p>
+                                <p className="text-yellow-700 text-xs">{field.buildingSpecialEquip(building)}</p>
+                              </div>
+                            )}
+
+                            {field.buildingNarrowDoors(building) && (
+                              <div className="mt-2 p-2 bg-orange-50 rounded">
+                                <p className="text-orange-700 text-xs font-medium">⚠️ Narrow doorways - Take precaution</p>
+                              </div>
+                            )}
+
+                            {field.buildingNotes(building) && (
+                              <div className="mt-2 p-2 bg-gray-50 rounded">
+                                <p className="text-gray-700 text-xs">{field.buildingNotes(building)}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Feedback */}
-                      {order.CustomerFeedback && (
+                      {field.orderFeedback(order) && (
                         <div className="border rounded-lg p-4">
                           <h4 className="font-medium text-gray-900 mb-2">Customer Feedback</h4>
-                          <p className="text-sm text-gray-600 italic">"{order.CustomerFeedback}"</p>
+                          <p className="text-sm text-gray-600 italic">"{field.orderFeedback(order)}"</p>
                         </div>
                       )}
                     </div>

@@ -71,6 +71,7 @@ async function getDocById(collectionName, id) {
 }
 
 async function addDocGeneric(collectionName, data, custom) {
+  console.log(`[informationService] addDocGeneric to ${collectionName}`, data, custom);
   // custom ID generation handled by server; keep API simple: POST /api/{resource}
   const endpoint = endpointMap[collectionName] || collectionName.toLowerCase();
   const res = await apiFetch(`${endpoint}`, { method: 'POST', body: data });
@@ -101,7 +102,7 @@ export const deleteEmployee = (id) => deleteDocGeneric("Employee", id);
 // -- Truck --
 export const getAllTrucks = () => getAllDocs("Truck");
 export const getTruckById = (id) => getDocById("Truck", id);
-export const addTruck = (data) => addDocGeneric("Truck", data, { idField: "truck_id", prefix: "TRK_" });
+export const addTruck = (data) => addDocGeneric("Truck", data);
 export const updateTruck = (id, data) => updateDocGeneric("Truck", id, data);
 export const deleteTruck = (id) => deleteDocGeneric("Truck", id);
 

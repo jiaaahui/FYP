@@ -14,36 +14,14 @@ import {
   Trash2,
   Edit3,
 } from 'lucide-react';
-import { db } from '../../../firebase';
-import {
-  collection,
-  getDocs,
-  doc,
-  setDoc,
-  updateDoc,
-  writeBatch,
-  addDoc,
-  serverTimestamp,
-  deleteDoc,
-} from 'firebase/firestore';
+
+const REACT_APP_API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:4000';
 
 /**
- * RoleAccessControl (pretty UI)
- * - Restores the original, richer UI you had (roles list, preview, add/delete, save, reset).
- * - Loads roles from Firestore collection "Roles". Each document's id is treated as roleId.
- *   Document fields:
- *     - name: human-readable role name
- *     - permissions: array of permission keys (nav keys) e.g. ['dashboard','warehouse']
- * - Loads nav items from Firestore collection "nav_items" if present (doc id = nav key, fields name, description, icon optional).
- *   Falls back to built-in mockNavItems for development.
- * - Saves role permissions back into Roles collection and writes an audit record to "access_logs".
- *
- * Notes:
- * - The UI protects the 'admin' role from deletion.
- * - When roles use generated doc ids (like j4EGF...) this UI will show the stored name and use the doc id for persistence.
- * - For consistent sidebar behavior, ensure Roles.permissions values use your navigation keys (e.g. 'dashboard', 'warehouse').
- *
- * File location: client/src/components/admin/access/accessControl.js
+ * RoleAccessControl - Now fetches from PostgreSQL via API
+ * - Loads roles from /api/roles endpoint
+ * - Saves role permissions back to PostgreSQL
+ * - Writes audit logs to access_logs table
  */
 
 const mockNavItems = [
@@ -71,7 +49,7 @@ export default function RoleAccessControl() {
   const [newRoleName, setNewRoleName] = useState('');
   const [error, setError] = useState(null);
 
-  // Load roles and nav items from Firestore on mount
+  // Load roles from PostgreSQL API
   useEffect(() => {
     let mounted = true;
 
@@ -79,29 +57,17 @@ export default function RoleAccessControl() {
       setLoading(true);
       setError(null);
       try {
-        // load nav_items if present
-        try {
-          const navSnap = await getDocs(collection(db, 'nav_items'));
-          if (!navSnap.empty && mounted) {
-            const items = navSnap.docs.map(d => ({ key: d.id, ...d.data() }));
-            setNavItems(items);
-          }
-        } catch (navErr) {
-          // ignore nav load errors; keep mock nav
-          console.warn('nav_items load failed (using mockNavItems):', navErr);
-        }
+        // Load roles from API
+        const response = await fetch(`${REACT_APP_API_BASE_URL}/api/roles`);
+        if (!response.ok) throw new Error('Failed to load roles');
 
-        // load Roles collection
-        const rolesSnap = await getDocs(collection(db, 'Roles'));
-        const loadedRoles = rolesSnap.docs.map(d => {
-          const data = d.data() || {};
-          return {
-            id: d.id,
-            name: data.name || d.id,
-            permissions: Array.isArray(data.permissions) ? data.permissions : [],
-            ...data,
-          };
-        });
+        const data = await response.json();
+        const loadedRoles = (data.data || data).map(role => ({
+          id: role.id,
+          name: role.name || role.id,
+          permissions: Array.isArray(role.permissions) ? role.permissions : [],
+          userCount: 0 // TODO: Could fetch from employees endpoint
+        }));
 
         if (!mounted) return;
 
@@ -110,7 +76,6 @@ export default function RoleAccessControl() {
         // build accessControl map
         const map = {};
         loadedRoles.forEach(r => {
-          // normalize permission keys to string values (don't mutate original stored values)
           map[r.id] = Array.isArray(r.permissions) ? r.permissions.slice() : [];
         });
 
@@ -121,7 +86,7 @@ export default function RoleAccessControl() {
         const hasAdmin = loadedRoles.find(r => r.id === 'admin' || (r.name && r.name.toLowerCase() === 'admin'));
         setSelectedRole(hasAdmin ? (hasAdmin.id) : (loadedRoles[0] ? loadedRoles[0].id : null));
       } catch (err) {
-        console.error('Failed to load roles or nav items:', err);
+        console.error('Failed to load roles:', err);
         setError('Failed to load role data. See console for details.');
       } finally {
         if (mounted) setLoading(false);
@@ -149,24 +114,32 @@ export default function RoleAccessControl() {
     setIsSaving(true);
     setError(null);
     try {
-      // Write all changed role permissions to Roles collection
-      const batch = writeBatch(db);
-      Object.keys(accessControl).forEach(roleId => {
+      // Update all changed role permissions via API
+      const updates = Object.keys(accessControl).filter(roleId => {
         const prev = originalAccessControl[roleId] || [];
         const curr = accessControl[roleId] || [];
-        // only write when different
-        if (JSON.stringify(prev) !== JSON.stringify(curr)) {
-          const ref = doc(db, 'Roles', roleId);
-          batch.set(ref, { permissions: curr }, { merge: true });
-        }
+        return JSON.stringify(prev) !== JSON.stringify(curr);
       });
-      await batch.commit();
+
+      for (const roleId of updates) {
+        const response = await fetch(`${REACT_APP_API_BASE_URL}/api/roles/${roleId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ permissions: accessControl[roleId] })
+        });
+
+        if (!response.ok) throw new Error(`Failed to update role ${roleId}`);
+      }
 
       // Write audit log
       try {
-        await addDoc(collection(db, 'access_logs'), {
-          changes: accessControl,
-          timestamp: serverTimestamp(),
+        await fetch(`${REACT_APP_API_BASE_URL}/api/access-logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            changes: accessControl,
+            changed_at: new Date().toISOString()
+          })
         });
       } catch (logErr) {
         console.warn('Failed to write access log:', logErr);
@@ -194,16 +167,21 @@ export default function RoleAccessControl() {
     setIsSaving(true);
     setError(null);
     try {
-      // Use slug id for role doc id
-      const slug = name.toLowerCase().replace(/\s+/g, '-');
-      const roleRef = doc(db, 'Roles', slug);
-      await setDoc(roleRef, { name, permissions: [] }, { merge: true });
-      // refresh local list
-      const newRole = { id: slug, name, permissions: [] };
-      setRoles(prev => [...prev, newRole]);
-      setAccessControl(prev => ({ ...prev, [slug]: [] }));
-      setOriginalAccessControl(prev => ({ ...prev, [slug]: [] }));
-      setSelectedRole(slug);
+      const response = await fetch(`${REACT_APP_API_BASE_URL}/api/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, permissions: [] })
+      });
+
+      if (!response.ok) throw new Error('Failed to create role');
+
+      const data = await response.json();
+      const newRole = data.data || data;
+
+      setRoles(prev => [...prev, { id: newRole.id, name: newRole.name, permissions: [], userCount: 0 }]);
+      setAccessControl(prev => ({ ...prev, [newRole.id]: [] }));
+      setOriginalAccessControl(prev => ({ ...prev, [newRole.id]: [] }));
+      setSelectedRole(newRole.id);
       setNewRoleName('');
       setShowAddRole(false);
     } catch (err) {
@@ -229,8 +207,12 @@ export default function RoleAccessControl() {
     setIsSaving(true);
     setError(null);
     try {
-      // delete doc from Roles
-      await deleteDoc(doc(db, 'Roles', roleId));
+      const response = await fetch(`${REACT_APP_API_BASE_URL}/api/roles/${roleId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Failed to delete role');
+
       // update local state
       setRoles(prev => prev.filter(r => r.id !== roleId));
       setAccessControl(prev => {
@@ -265,9 +247,16 @@ export default function RoleAccessControl() {
 
   const selectedRoleInfo = selectedRole ? getRoleInfo(selectedRole) : null;
 
-  // UI Rendering (original pretty UI, preserved look & feel)
+  // UI Rendering
   if (loading) {
-    return <div className="p-6 text-gray-600">Loading access control...</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading access control...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -381,17 +370,6 @@ export default function RoleAccessControl() {
                           <div className="flex items-center justify-between">
                             <h4 className="font-medium text-gray-900 text-sm">{roleInfo.name}</h4>
                             <div className="flex items-center space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditClick(role);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-600 hover:bg-gray-50 rounded transition-all"
-                                title="Edit role name"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </button>
-
                               {roleId !== 'admin' && (
                                 <button
                                   onClick={(e) => {
@@ -475,64 +453,9 @@ export default function RoleAccessControl() {
                 })}
               </div>
             </div>
-
-            {/* Access Preview Panel */}
-            {showPreview && (
-              <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Navigation Preview for {selectedRoleInfo ? selectedRoleInfo.name : ''}
-                </h3>
-                <div className="bg-gray-900 rounded-lg p-4">
-                  <div className="flex flex-col space-y-2">
-                    {navItems.map(navItem => {
-                      const hasAccess = selectedRole ? (accessControl[selectedRole] || []).includes(navItem.key) : false;
-
-                      return (
-                        <div
-                          key={navItem.key}
-                          className={`flex items-center p-3 rounded ${
-                            hasAccess
-                              ? 'text-white bg-gray-800 hover:bg-gray-700'
-                              : 'text-gray-500 opacity-50 cursor-not-allowed'
-                          }`}
-                        >
-                          <span className="mr-3">{navItem.icon || '🔹'}</span>
-                          <span className="font-medium">{navItem.name}</span>
-                          {!hasAccess && (
-                            <X className="h-4 w-4 ml-auto text-red-500" />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mt-3">
-                  This shows how the navigation would appear for users with the "{selectedRoleInfo ? selectedRoleInfo.name : ''}" role.
-                  Grayed out items would be hidden or inaccessible.
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
-
-  // helper inside to avoid re-defining in map closures
-  function handleEditClick(role) {
-    // simple prompt to edit role name inline (keeps UI compact)
-    const newName = window.prompt('Edit role name:', role.name || '');
-    if (!newName) return;
-    const trimmed = newName.trim();
-    if (trimmed === role.name) return;
-    // update Firestore name field and local state
-    updateDoc(doc(db, 'Roles', role.id), { name: trimmed })
-      .then(() => {
-        setRoles(prev => prev.map(r => r.id === role.id ? { ...r, name: trimmed } : r));
-      })
-      .catch(err => {
-        console.error('Failed to update role name:', err);
-        setError('Failed to update role name. See console for details.');
-      });
-  }
 }

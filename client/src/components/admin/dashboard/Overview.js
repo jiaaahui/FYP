@@ -269,8 +269,11 @@ export default function Overview() {
   const currentMonthCompleted = currentMonthOrders.filter(order => getOrderStatus(order) === 'Completed').length;
   const currentMonthPending = currentMonthOrders.filter(order => getOrderStatus(order) === 'Pending').length;
 
+  // Helper to get employee ID from order
+  const getEmployeeId = (order) => order.employee_id ?? order.EmployeeID ?? order.employeeId;
+
   // Active employees for selected month = distinct employees who had orders this month
-  const activeEmployeeIdsThisMonth = Array.from(new Set(currentMonthOrders.map(o => o.EmployeeID || o.employee_id || o.employeeId).filter(Boolean)));
+  const activeEmployeeIdsThisMonth = Array.from(new Set(currentMonthOrders.map(o => getEmployeeId(o)).filter(Boolean)));
   const activeEmployees = activeEmployeeIdsThisMonth.length;
 
   console.log('[Dashboard] Current month stats:', {

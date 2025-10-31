@@ -17,26 +17,26 @@ model roles {
 }
 
 model employees {
-  id              String                        @id @default(uuid())
+  id              String                      @id @default(uuid())
   name            String?
-  displayName     String?                       @map("display_name")
-  email           String?                       @unique
-  contactNumber   String?                       @map("contact_number")
-  roleId          String?                       @map("role_id")
-  activeFlag      Boolean                       @default(true) @map("active_flag")
+  displayName     String?                     @map("display_name")
+  email           String?                     @unique
+  contactNumber   String?                     @map("contact_number")
+  roleId          String?                     @map("role_id")
+  activeFlag      Boolean                     @default(true) @map("active_flag")
   password        String?
   bio             String?
-  createdAt       DateTime                      @default(now()) @map("created_at")
-  updatedAt       DateTime                      @updatedAt @map("updated_at")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
   teamAssignments employee_team_assignments[]
-  role            roles?                        @relation(fields: [roleId], references: [id], onUpdate: NoAction)
+  role            roles?                      @relation(fields: [roleId], references: [id], onUpdate: NoAction)
   orders          orders[]
 }
 
 model teams {
-  id          String                        @id @default(uuid())
-  teamType    String?                       @map("team_type")
-  createdAt   DateTime                      @default(now()) @map("created_at")
+  id          String                      @id @default(uuid())
+  teamType    String?                     @map("team_type")
+  createdAt   DateTime                    @default(now()) @map("created_at")
   assignments employee_team_assignments[]
 }
 
@@ -53,45 +53,45 @@ model employee_team_assignments {
 
 model zones {
   id          String        @id @default(uuid())
-  zoneName    String?       @map("zone_name")
-  createdAt   DateTime      @default(now()) @map("created_at")
+  zone_name   String?
+  created_at  DateTime      @default(now())
   buildings   buildings[]
   truck_zones truck_zones[]
 }
 
 model buildings {
-  id                      String    @id @default(uuid())
-  buildingName            String?   @map("building_name")
-  housingType             String?   @map("housing_type")
-  specialEquipmentNeeded  String?   @map("special_equipment_needed")
-  vehicleSizeLimit        String?   @map("vehicle_size_limit")
-  vehicleLengthLimit      String?   @map("vehicle_length_limit")
-  vehicleWidthLimit       String?   @map("vehicle_width_limit")
-  postalCode              String?   @map("postal_code")
-  loadingBayAvailable     Boolean?  @map("loading_bay_available")
-  accessTimeWindowStart   String?   @map("access_time_window_start")
-  accessTimeWindowEnd     String?   @map("access_time_window_end")
-  preRegistrationRequired Boolean?  @map("pre_registration_required")
-  zoneId                  String?   @map("zone_id")
-  liftAvailable           Boolean?  @map("lift_available")
-  liftDimensions          String?   @map("lift_dimensions")
-  notes                   String?
-  parkingDistance         String?   @map("parking_distance")
-  narrowDoorways          Boolean?  @map("narrow_doorways")
-  updatedAt               DateTime? @map("updated_at")
-  createdAt               DateTime  @default(now()) @map("created_at")
-  zone                    zones?    @relation(fields: [zoneId], references: [id], onUpdate: NoAction)
-  orders                  orders[]
+  id                        String    @id @default(uuid())
+  building_name             String?
+  housing_type              String?
+  special_equipment_needed  String?
+  vehicle_size_limit        String?
+  vehicle_length_limit      String?
+  vehicle_width_limit       String?
+  postal_code               String?
+  loading_bay_available     Boolean?
+  access_time_window_start  String?
+  access_time_window_end    String?
+  pre_registration_required Boolean?
+  zone_id                   String?
+  lift_available            Boolean?
+  lift_dimensions           String?
+  notes                     String?
+  parking_distance          String?
+  narrow_doorways           Boolean?
+  updated_at                DateTime?
+  created_at                DateTime  @default(now())
+  zone                      zones?    @relation(fields: [zone_id], references: [id], onUpdate: NoAction)
+  orders                    orders[]
 }
 
 model access_logs {
-  id         String    @id
+  id         String    @id @default(uuid())
   changed_at DateTime?
   changes    Json?
 }
 
 model chats {
-  id              String    @id
+  id              String    @id @default(uuid())
   order_number    String?
   members         Json?
   names           Json?
@@ -100,7 +100,7 @@ model chats {
 }
 
 model customers {
-  id         String    @id
+  id         String    @id @default(uuid())
   full_name  String?
   email      String?
   phone      String?
@@ -113,7 +113,7 @@ model customers {
 }
 
 model lorry_trips {
-  id                String    @id
+  id                String    @id @default(uuid())
   delivery_team_id  String?
   warehouse_team_id String?
   truck_id          String?
@@ -135,7 +135,7 @@ model order_products {
 }
 
 model orders {
-  id                        String           @id
+  id                        String           @id @default(uuid())
   customer_id               String?
   building_id               String?
   employee_id               String?
@@ -159,28 +159,31 @@ model orders {
 }
 
 model products {
-  id                           String           @id
-  product_name                 String?
-  package_length_cm            Int?
-  package_height_cm            Int?
-  package_width_cm             Int?
-  fragile_flag                 Boolean?
-  installer_team_required_flag Boolean?
-  dismantle_time_min           Int?
-  dismantle_time_max           Int?
-  created_at                   DateTime         @default(now())
-  order_products               order_products[]
+  id                              String           @id @default(uuid())
+  product_name                    String?
+  package_length_cm               Int?
+  package_height_cm               Int?
+  package_width_cm                Int?
+  fragile_flag                    Boolean?
+  installer_team_required_flag    Boolean?
+  dismantle_time                  Int?
+  created_at                      DateTime         @default(now())
+  estimated_installation_time_min Int?
+  estimated_installation_time_max Int?
+  no_lie_down_flag                Boolean?
+  dismantle_required_flag         Boolean?
+  order_products                  order_products[]
 }
 
 model reports {
-  id         String    @id
+  id         String    @id @default(uuid())
   content    String?
   status     String?
   created_at DateTime?
 }
 
 model time_slots {
-  id                String    @id
+  id                String    @id @default(uuid())
   date              String?
   time_window_start String?
   time_window_end   String?
@@ -189,7 +192,7 @@ model time_slots {
 }
 
 model truck_zones {
-  id              String   @id
+  id              String   @id @default(uuid())
   zone_id         String?
   is_primary_zone Boolean?
   truck_id        String?
@@ -198,7 +201,7 @@ model truck_zones {
 }
 
 model trucks {
-  id          String        @id
+  id          String        @id @default(uuid())
   plate_no    String?
   length_cm   Int?
   width_cm    Int?

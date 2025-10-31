@@ -23,16 +23,19 @@ export default function EmployeePerformance() {
   }, []);
 
   // Helpers for flexible field access and dates (same approach as Overview)
-  const getOrderId = (order) => order.OrderID || order.id;
+  const getOrderId = (order) => order.id || order.OrderID || order.orderId;
   const getOrderRating = (order) => {
-    const r = order.CustomerRating ?? order.rating ?? order.Rating ?? null;
+    const r = order.customer_rating ?? order.CustomerRating ?? order.rating ?? order.Rating ?? null;
     return (r === '' || r === null || typeof r === 'undefined') ? null : Number(r);
   };
+  const getOrderFeedback = (order) => order.customer_feedback ?? order.CustomerFeedback ?? order.feedback ?? '';
+  const getOrderStatus = (order) => order.order_status ?? order.OrderStatus ?? order.status ?? '';
+  const getEmployeeId = (order) => order.employee_id ?? order.EmployeeID ?? order.employeeId;
 
   // Robust getOrderDate: returns Date object or null if no valid date found.
   const getOrderDate = (order) => {
     if (!order) return null;
-    const tryFields = ['ActualArrivalDateTime', 'DeliveredDate', 'OrderDate', 'createdAt', 'CreatedAt', 'Created'];
+    const tryFields = ['actual_arrival_date_time', 'ActualArrivalDateTime', 'actual_end_date_time', 'created_at', 'createdAt', 'CreatedAt'];
     for (const f of tryFields) {
       const v = order[f];
       if (!v) continue;
@@ -83,7 +86,8 @@ export default function EmployeePerformance() {
 
   // Calculate stats for each employee using only orders in the selected month
   const employeeStats = employees.map(employee => {
-    const employeeOrders = filteredOrdersForMonth.filter(order => order.EmployeeID === employee.EmployeeID);
+    const empId = employee.id || employee.EmployeeID || employee.employeeId;
+    const employeeOrders = filteredOrdersForMonth.filter(order => getEmployeeId(order) === empId);
     const ratings = employeeOrders.map(o => getOrderRating(o)).filter(r => typeof r === 'number' && !isNaN(r));
     const avgRating = ratings.length > 0
       ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length)
@@ -92,6 +96,7 @@ export default function EmployeePerformance() {
 
     return {
       ...employee,
+      employeeId: empId,
       orderCount: employeeOrders.length,
       avgRating,
       totalIncentive,
@@ -195,27 +200,27 @@ export default function EmployeePerformance() {
       {/* Employee Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {employeeStats.map((employee) => (
-          <div key={employee.EmployeeID} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+          <div key={employee.employeeId || employee.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <div className="flex items-center mb-2">
-                    <h4 className="font-semibold text-gray-900 text-lg">{employee.name}</h4>
-                    <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${employee.ActiveFlag !== false
+                    <h4 className="font-semibold text-gray-900 text-lg">{employee.name || employee.displayName}</h4>
+                    <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${(employee.activeFlag ?? employee.ActiveFlag ?? true)
                         ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
                       }`}>
-                      {employee.ActiveFlag !== false ? 'Active' : 'Inactive'}
+                      {(employee.activeFlag ?? employee.ActiveFlag ?? true) ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 flex items-center">
                     <Badge className="h-4 w-4 mr-1" />
-                    {employee.role || 'Staff Member'}
+                    {employee.role?.name || employee.roleName || 'Staff Member'}
                   </p>
-                  {employee.contact_number && (
+                  {(employee.contactNumber || employee.contact_number) && (
                     <p className="text-sm text-gray-600 flex items-center mt-1">
                       <Phone className="h-4 w-4 mr-1" />
-                      {employee.contact_number}
+                      {employee.contactNumber || employee.contact_number}
                     </p>
                   )}
                 </div>
@@ -242,7 +247,7 @@ export default function EmployeePerformance() {
               {/* Employee ID */}
               <div className="pt-4 border-t border-gray-100">
                 <p className="text-xs text-gray-500">
-                  Employee ID: <span className="font-mono">{employee.EmployeeID}</span>
+                  Employee ID: <span className="font-mono">{employee.employeeId || employee.id}</span>
                 </p>
               </div>
             </div>
@@ -273,37 +278,39 @@ export default function EmployeePerformance() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredOrdersForMonth.map((order) => {
-                const employee = employees.find(e => e.EmployeeID === order.EmployeeID);
+                const empId = getEmployeeId(order);
+                const employee = employees.find(e => (e.id || e.EmployeeID) === empId);
+                const rating = getOrderRating(order);
                 return (
                   <tr key={getOrderId(order)} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{getOrderId(order)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       <div>
-                        <div className="font-medium">{employee?.name || 'Unknown'}</div>
-                        <div className="text-xs text-gray-500">ID: {order.EmployeeID}</div>
+                        <div className="font-medium">{employee?.name || employee?.displayName || 'Unknown'}</div>
+                        <div className="text-xs text-gray-500">ID: {empId}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {order.CustomerRating ? (
+                      {rating !== null ? (
                         <div className="flex items-center">
                           <Star className="h-4 w-4 text-yellow-400 mr-1 fill-current" />
-                          <span className="font-medium">{order.CustomerRating}</span>
+                          <span className="font-medium">{rating.toFixed(1)}</span>
                         </div>
                       ) : (
                         <span className="text-gray-400">No rating</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={order.CustomerFeedback}>
-                      {order.CustomerFeedback || 'No feedback provided'}
+                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={getOrderFeedback(order)}>
+                      {getOrderFeedback(order) || 'No feedback provided'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${order.OrderStatus === 'Completed'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getOrderStatus(order) === 'Completed'
                           ? 'bg-green-100 text-green-800'
-                          : order.OrderStatus === 'Pending'
+                          : getOrderStatus(order) === 'Pending'
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
-                        {order.OrderStatus}
+                        {getOrderStatus(order)}
                       </span>
                     </td>
                   </tr>

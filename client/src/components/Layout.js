@@ -23,6 +23,7 @@ import AutoScheduleReview from './admin/schedule/AutoScheduleReview';
 import DeliverySchedule from './delivery/DelSchedule';
 import InstallationSchedule from './installer/InsSchedule';
 import WarehouseLoadingSchedule from './warehouse/truckSchedule';
+import PlaceOrder from './customer/PlaceOrder';
 
 /**
  * Layout
@@ -122,7 +123,15 @@ const Layout = () => {
         { id: 'warehouse', label: 'Warehouse Schedule', path: 'warehouse', component: WarehouseLoadingSchedule },
       ],
     },
-  };
+    customer: {
+      title: 'Customer Management',
+      icon: Users,
+      route: '/customer',
+      topNavItems: [
+        { id: 'customer', label: 'Customer List', path: 'customer', component: PlaceOrder },
+      ],
+    }
+  }
 
   // normalize helper
   const normalize = (s) => (s || '').toString().toLowerCase().trim();
